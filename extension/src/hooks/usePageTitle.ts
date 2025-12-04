@@ -4,7 +4,6 @@ export const usePageTitle = (
   originalTitle: string,
   retryCount: number,
   maxRetries: number,
-  isPaused: boolean,
   autoRetryEnabled: boolean,
   isRateLimited: boolean = false
 ) => {
@@ -16,12 +15,10 @@ export const usePageTitle = (
 
     if (isRateLimited) {
       document.title = `⏳ Rate Limited - ${originalTitle}`;
-    } else if (isPaused) {
-      document.title = `⏸️ ${originalTitle}`;
     } else if (retryCount >= maxRetries) {
       document.title = `❌ ${originalTitle}`;
     } else {
       document.title = `🔄 ${retryCount}/${maxRetries} ${originalTitle}`;
     }
-  }, [originalTitle, retryCount, maxRetries, isPaused, autoRetryEnabled, isRateLimited]);
+  }, [originalTitle, retryCount, maxRetries, autoRetryEnabled, isRateLimited]);
 };

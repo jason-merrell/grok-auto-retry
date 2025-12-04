@@ -22,7 +22,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <Label className="text-sm">Prompt</Label>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex items-center text-xs text-muted-foreground">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button 
@@ -32,7 +32,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
                 onClick={onCopyFromSite}
               >
                 <ArrowDown className="h-3.5 w-3.5" />
-                <span className="font-medium">Import</span>
+                <span className="font-medium sr-only">Import</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>Import prompt from site textarea</TooltipContent>
@@ -48,7 +48,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
                 disabled={!value}
               >
                 <ArrowUp className="h-3.5 w-3.5" />
-                <span className="font-medium">Export</span>
+                <span className="font-medium sr-only">Export</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>Export prompt to site textarea</TooltipContent>
@@ -57,7 +57,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
       </div>
       <Textarea 
         placeholder="Your prompt will appear here..."
-        className="min-h-[80px] resize-none text-xs"
+        className="min-h-[160px] text-xs resize-y"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />

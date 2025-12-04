@@ -6,49 +6,55 @@ import { RetryControls } from './RetryControls';
 import { RetryStats } from './RetryStats';
 import { MaxRetriesControls } from './MaxRetriesControls';
 import { PromptTextarea } from './PromptTextarea';
+import { PromptPartials } from './PromptPartials';
+import { ActionButton } from './ActionButton';
 
 interface ControlPanelProps {
   width: number;
   height: number;
   fontSize: number;
-  isPaused: boolean;
   autoRetryEnabled: boolean;
   retryCount: number;
   maxRetries: number;
   promptValue: string;
+  isSessionActive: boolean;
   onResizeStart: (e: React.MouseEvent) => void;
-  onPauseToggle: () => void;
   onMinimize: () => void;
   onAutoRetryChange: (enabled: boolean) => void;
   onMaxRetriesChange: (value: number) => void;
   onResetRetries: () => void;
   onPromptChange: (value: string) => void;
+  onPromptAppend: (value: string, position: 'prepend' | 'append') => void;
   onCopyFromSite: () => void;
   onCopyToSite: () => void;
+  onGenerateVideo: () => void;
+  onCancelSession: () => void;
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
   width,
   height,
   fontSize,
-  isPaused,
   autoRetryEnabled,
   retryCount,
   maxRetries,
   promptValue,
+  isSessionActive,
   onResizeStart,
-  onPauseToggle,
   onMinimize,
   onAutoRetryChange,
   onMaxRetriesChange,
   onResetRetries,
   onPromptChange,
+  onPromptAppend,
   onCopyFromSite,
   onCopyToSite,
+  onGenerateVideo,
+  onCancelSession,
 }) => {
   return (
     <Card 
-      className="fixed shadow-xl"
+      className="fixed shadow-xl flex flex-col"
       style={{
         bottom: '16px',
         right: '16px',
@@ -59,17 +65,15 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
     >
       <ResizeHandle onResizeStart={onResizeStart} />
       
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 shrink-0">
         <PanelHeader 
-          isPaused={isPaused}
-          onPauseToggle={onPauseToggle}
           onMinimize={onMinimize}
         />
       </CardHeader>
       
       <CardContent 
-        className="space-y-3 overflow-auto" 
-        style={{ maxHeight: `${height - 80}px` }}
+        className="space-y-3 overflow-auto flex-1" 
+        style={{ maxHeight: `${height - 140}px` }}
       >
         <RetryControls 
           autoRetryEnabled={autoRetryEnabled}
@@ -94,7 +98,19 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           onCopyFromSite={onCopyFromSite}
           onCopyToSite={onCopyToSite}
         />
+        
+        <PromptPartials 
+          onAppendPartial={onPromptAppend}
+        />
       </CardContent>
+      
+      <div className="px-6 pb-4 shrink-0 border-t border-border pt-3">
+        <ActionButton
+          isSessionActive={isSessionActive}
+          onGenerate={onGenerateVideo}
+          onCancel={onCancelSession}
+        />
+      </div>
     </Card>
   );
 };

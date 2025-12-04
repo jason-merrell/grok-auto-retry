@@ -5,7 +5,7 @@ export interface PostData {
   autoRetryEnabled: boolean;
   lastPromptValue: string;
   retryCount: number;
-  isPaused: boolean;
+  isSessionActive: boolean;
 }
 
 const DEFAULT_POST_DATA: PostData = {
@@ -13,7 +13,7 @@ const DEFAULT_POST_DATA: PostData = {
   autoRetryEnabled: false,
   lastPromptValue: '',
   retryCount: 0,
-  isPaused: false,
+  isSessionActive: false,
 };
 
 const STORAGE_PREFIX = 'grokRetryPost_';

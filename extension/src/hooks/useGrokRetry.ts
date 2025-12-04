@@ -24,8 +24,8 @@ export const useGrokRetry = (postId: string | null) => {
   const maxRetries = postData.maxRetries;
   const autoRetryEnabled = postData.autoRetryEnabled;
   const retryCount = postData.retryCount;
-  const isPaused = postData.isPaused;
   const lastPromptValue = postData.lastPromptValue;
+  const isSessionActive = postData.isSessionActive;
 
   const setMaxRetries = useCallback((value: number) => {
     const clamped = Math.max(1, Math.min(50, value));
@@ -36,15 +36,21 @@ export const useGrokRetry = (postId: string | null) => {
     save('autoRetryEnabled', value);
   }, [save]);
 
-  const setIsPaused = useCallback((value: boolean) => {
-    save('isPaused', value);
-  }, [save]);
-
   const updatePromptValue = useCallback((value: string) => {
     save('lastPromptValue', value);
   }, [save]);
 
   const resetRetries = useCallback(() => {
+    save('retryCount', 0);
+  }, [save]);
+
+  const startSession = useCallback(() => {
+    save('isSessionActive', true);
+    save('retryCount', 0);
+  }, [save]);
+
+  const endSession = useCallback(() => {
+    save('isSessionActive', false);
     save('retryCount', 0);
   }, [save]);
 
@@ -103,9 +109,10 @@ export const useGrokRetry = (postId: string | null) => {
     button.click();
     setLastClickTime(now);
     
-    // Increment retry count
+    // Increment retry count and mark session as active
     const newCount = retryCount + 1;
     save('retryCount', newCount);
+    save('isSessionActive', true);
     console.log('[Grok Retry] Clicked button, retry count:', retryCount, '->', newCount);
     
     return true;
@@ -116,16 +123,17 @@ export const useGrokRetry = (postId: string | null) => {
     retryCount,
     maxRetries,
     autoRetryEnabled,
-    isPaused,
     lastPromptValue,
     originalPageTitle,
+    isSessionActive,
     
     // Actions
     setMaxRetries,
     setAutoRetryEnabled,
-    setIsPaused,
     updatePromptValue,
     resetRetries,
     clickMakeVideoButton,
+    startSession,
+    endSession,
   };
 };

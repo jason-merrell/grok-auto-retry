@@ -12,6 +12,7 @@
   "content_scripts": [
     {
       "matches": ["https://grok.com/*"],
+      "exclude_matches": ["https://auth.grok.com/*"],
       "js": ["content.js"],
       "css": ["style.css"],
       "run_at": "document_idle"

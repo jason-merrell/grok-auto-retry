@@ -3,6 +3,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { useGrokRetry } from '@/hooks/useGrokRetry';
 import { useStorage } from '@/hooks/useStorage';
 import { useModerationDetector } from '@/hooks/useModerationDetector';
+import { useSuccessDetector } from '@/hooks/useSuccessDetector';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { usePromptCapture } from '@/hooks/usePromptCapture';
 import { usePanelResize } from '@/hooks/usePanelResize';
@@ -25,9 +26,21 @@ const App: React.FC = () => {
 
   // Handle moderation detection
   const handleModerationDetected = React.useCallback(() => {
-    if (retry.isPaused || !retry.autoRetryEnabled) return;
-    if (retry.retryCount >= retry.maxRetries) {
-      console.log('[Grok Retry] Max retries reached');
+    // Check if we should retry
+    const shouldRetry = retry.autoRetryEnabled && retry.retryCount < retry.maxRetries;
+    
+    if (!shouldRetry) {
+      console.log('[Grok Retry] Moderation detected but not retrying:', {
+        autoRetryEnabled: retry.autoRetryEnabled,
+        retryCount: retry.retryCount,
+        maxRetries: retry.maxRetries
+      });
+      
+      // End session if we're not going to retry
+      if (retry.isSessionActive) {
+        console.log('[Grok Retry] Ending session - no retry will occur');
+        retry.endSession();
+      }
       return;
     }
 
@@ -50,12 +63,19 @@ const App: React.FC = () => {
 
   const { rateLimitDetected } = useModerationDetector(handleModerationDetected, retry.autoRetryEnabled);
 
+  // Handle successful video generation
+  const handleSuccess = React.useCallback(() => {
+    console.log('[Grok Retry] Video generated successfully!');
+    retry.endSession();
+  }, [retry]);
+
+  useSuccessDetector(handleSuccess, retry.isSessionActive);
+
   // Set up page title updates
   usePageTitle(
     retry.originalPageTitle,
     retry.retryCount,
     retry.maxRetries,
-    retry.isPaused,
     retry.autoRetryEnabled,
     rateLimitDetected
   );
@@ -78,6 +98,41 @@ const App: React.FC = () => {
     if (retry.lastPromptValue) {
       copyPromptToSite(retry.lastPromptValue);
     }
+  };
+
+  const handlePromptAppend = (partial: string, position: 'prepend' | 'append') => {
+    const currentPrompt = retry.lastPromptValue || '';
+    
+    // Check if partial content (trimmed and without period) already exists in prompt
+    const partialContent = partial.trim().replace(/\.$/, '');
+    if (currentPrompt.toLowerCase().includes(partialContent.toLowerCase())) {
+      return; // Already exists, don't add
+    }
+    
+    const newPrompt = position === 'prepend' 
+      ? partial + currentPrompt 
+      : currentPrompt + partial;
+    
+    retry.updatePromptValue(newPrompt);
+  };
+
+  const handleGenerateVideo = () => {
+    // Capture prompt if not already captured
+    let promptToUse = retry.lastPromptValue;
+    if (!promptToUse) {
+      const captured = capturePromptFromSite();
+      if (captured) {
+        promptToUse = captured;
+        retry.updatePromptValue(captured);
+      }
+    }
+    
+    retry.startSession();
+    retry.clickMakeVideoButton(promptToUse);
+  };
+
+  const handleCancelSession = () => {
+    retry.endSession();
   };
 
   const handleMinimizeClick = () => {
@@ -114,20 +169,22 @@ const App: React.FC = () => {
           width={panelResize.width}
           height={panelResize.height}
           fontSize={panelResize.fontSize}
-          isPaused={retry.isPaused}
           autoRetryEnabled={retry.autoRetryEnabled}
           retryCount={retry.retryCount}
           maxRetries={retry.maxRetries}
           promptValue={retry.lastPromptValue}
+          isSessionActive={retry.isSessionActive}
           onResizeStart={panelResize.handleResizeStart}
-          onPauseToggle={() => retry.setIsPaused(!retry.isPaused)}
           onMinimize={() => saveUIPref('isMinimized', true)}
           onAutoRetryChange={retry.setAutoRetryEnabled}
           onMaxRetriesChange={retry.setMaxRetries}
           onResetRetries={retry.resetRetries}
           onPromptChange={retry.updatePromptValue}
+          onPromptAppend={handlePromptAppend}
           onCopyFromSite={handleCopyFromSite}
           onCopyToSite={handleCopyToSite}
+          onGenerateVideo={handleGenerateVideo}
+          onCancelSession={handleCancelSession}
         />
       </TooltipProvider>
     </div>
