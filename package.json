@@ -1,18 +1,19 @@
 {
   "name": "grok-retry-script",
-  "version": "1.0.0",
-  "description": "TypeScript project",
+  "version": "1.7.0",
+  "description": "Grok Auto Retry userscript with TypeScript",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "build": "tsc && node build.js",
+    "watch": "tsc --watch",
+    "dev": "tsc --watch"
   },
-  "keywords": [],
+  "keywords": ["userscript", "tampermonkey", "grok"],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/tampermonkey": "^5.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.0"
   }

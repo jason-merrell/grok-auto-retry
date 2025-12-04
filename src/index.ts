@@ -1,16 +1,33 @@
-// ==UserScript==
-// @name         Grok Imagine - Auto Retry "Make video" on moderation (compact + draggable mini toggle)
-// @namespace    http://tampermonkey.net/
-// @version      1.7
-// @description  Optional auto-retry for video generation when moderation message appears, with bottom-right UI, custom resize, pause, +/- controls, and draggable mini '+' toggle when minimized.
-// @author       you
-// @match        https://grok.com/*
-// @run-at       document-idle
-// @grant        none
-// ==/UserScript==
-
 (function () {
 	"use strict";
+
+	/************************************************************
+	 * TAILWIND CSS INJECTION
+	 ************************************************************/
+	function injectTailwind(): void {
+		if (document.getElementById('grok-retry-tailwind')) return;
+		
+		// Inject Tailwind config to use a specific prefix and layer
+		const configScript = document.createElement('script');
+		configScript.id = 'grok-retry-tailwind-config';
+		configScript.textContent = `
+			tailwind.config = {
+				prefix: 'tw-',
+				corePlugins: {
+					preflight: false, // Disable Tailwind's base styles
+				},
+				important: '#grok-moderation-retry-panel, #grok-moderation-retry-mini-toggle',
+			}
+		`;
+		document.head.appendChild(configScript);
+		
+		const script = document.createElement('script');
+		script.id = 'grok-retry-tailwind';
+		script.src = 'https://cdn.tailwindcss.com';
+		document.head.appendChild(script);
+		
+		log("Tailwind CSS injected with scoped configuration");
+	}
 
 	/************************************************************
 	 * CONFIG
@@ -30,66 +47,66 @@
 	/************************************************************
 	 * STATE
 	 ************************************************************/
-	let lastClickTime = 0;
-	let retryCount = 0;
-	let maxRetries = DEFAULT_MAX_RETRIES;
-	let autoRetryEnabled = false;
-	let isPaused = false;
-	let isMinimized = false;
-	let lastPromptValue = "";
-	let originalPageTitle = "";
-	let lastCaptureTime = 0;
+	let lastClickTime: number = 0;
+	let retryCount: number = 0;
+	let maxRetries: number = DEFAULT_MAX_RETRIES;
+	let autoRetryEnabled: boolean = false;
+	let isPaused: boolean = false;
+	let isMinimized: boolean = false;
+	let lastPromptValue: string = "";
+	let originalPageTitle: string = "";
+	let lastCaptureTime: number = 0;
 
 	// UI elements
-	let retryInfoSpan = null;
-	let maxRetriesInput = null;
-	let enabledCheckbox = null;
-	let pauseButton = null;
-	let minimizeButton = null;
-	let contentWrapper = null;
-	let panel = null;
-	let miniToggle = null; // the little '+' bubble
-	let promptTextarea = null;
-	let promptSyncIndicator = null;
-	let copyFromSiteBtn = null;
+	let retryInfoSpan: HTMLSpanElement | null = null;
+	let maxRetriesInput: HTMLInputElement | null = null;
+	let enabledCheckbox: HTMLInputElement | null = null;
+	let pauseButton: HTMLButtonElement | null = null;
+	let minimizeButton: HTMLButtonElement | null = null;
+	let contentWrapper: HTMLDivElement | null = null;
+	let panel: HTMLDivElement | null = null;
+	let miniToggle: HTMLDivElement | null = null;
+	let promptTextarea: HTMLTextAreaElement | null = null;
+	let promptSyncIndicator: HTMLDivElement | null = null;
+	let copyFromSiteBtn: HTMLButtonElement | null = null;
 
 	// Resize state (panel)
-	let isResizing = false;
-	let startX = 0;
-	let startY = 0;
-	let startWidth = 0;
-	let startHeight = 0;
+	let isResizing: boolean = false;
+	let startX: number = 0;
+	let startY: number = 0;
+	let startWidth: number = 0;
+	let startHeight: number = 0;
 
 	// Drag state (mini toggle)
-	let miniDragging = false;
-	let miniDragMoved = false;
-	let miniStartX = 0;
-	let miniStartY = 0;
-	let miniStartLeft = 0;
-	let miniStartTop = 0;
+	let miniDragging: boolean = false;
+	let miniDragMoved: boolean = false;
+	let miniStartX: number = 0;
+	let miniStartY: number = 0;
+	let miniStartLeft: number = 0;
+	let miniStartTop: number = 0;
 
 	/************************************************************
 	 * LOGGING
 	 ************************************************************/
-	function log(...args) {
+	function log(...args: any[]): void {
 		console.log("[Grok-Moderation-Retry]", ...args);
 	}
 
 	/************************************************************
 	 * CORE LOGIC
 	 ************************************************************/
-	function findModerationTextPresent() {
-		return document.body && document.body.textContent.includes(MODERATION_TEXT);
+	function findModerationTextPresent(): boolean {
+		return document.body && document.body.textContent!.includes(MODERATION_TEXT);
 	}
 
-	function updateRetryInfo() {
+	function updateRetryInfo(): void {
 		if (retryInfoSpan) {
 			retryInfoSpan.textContent = `${retryCount}/${maxRetries}`;
 		}
 		updatePageTitle();
 	}
 
-	function updatePageTitle() {
+	function updatePageTitle(): void {
 		if (autoRetryEnabled && retryCount > 0) {
 			if (isPaused) {
 				document.title = `⏸️ [${retryCount}/${maxRetries}] ${originalPageTitle}`;
@@ -103,8 +120,8 @@
 		}
 	}
 
-	function setMaxRetries(val, fromUI = true) {
-		let clamped = parseInt(val, 10);
+	function setMaxRetries(val: string | number, fromUI: boolean = true): void {
+		let clamped = parseInt(String(val), 10);
 		if (isNaN(clamped)) clamped = DEFAULT_MAX_RETRIES;
 		if (clamped < MIN_RETRIES_HARD_LIMIT) clamped = MIN_RETRIES_HARD_LIMIT;
 		if (clamped > MAX_RETRIES_HARD_LIMIT) clamped = MAX_RETRIES_HARD_LIMIT;
@@ -119,11 +136,11 @@
 		}
 	}
 
-	function incrementMaxRetries(delta) {
+	function incrementMaxRetries(delta: number): void {
 		setMaxRetries(maxRetries + delta);
 	}
 
-	function clickMakeVideoButton() {
+	function clickMakeVideoButton(): void {
 		if (!autoRetryEnabled) return;
 		if (isPaused) return;
 
@@ -137,13 +154,13 @@
 			return;
 		}
 
-		const btn = document.querySelector(BUTTON_SELECTOR);
+		const btn = document.querySelector(BUTTON_SELECTOR) as HTMLButtonElement | null;
 		if (!btn) {
 			log('Moderation text detected, but "Make video" button not found.');
 			return;
 		}
 
-		const siteTextarea = document.querySelector(TEXTAREA_SELECTOR);
+		const siteTextarea = document.querySelector(TEXTAREA_SELECTOR) as HTMLTextAreaElement | null;
 		if (!siteTextarea) {
 			log('Site textarea not found.');
 			return;
@@ -159,8 +176,11 @@
 		log(`Setting prompt: "${promptToUse}"`);
 		
 		// Use React-style property setting for modern frameworks
-		const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-		nativeInputValueSetter.call(siteTextarea, promptToUse);
+		const descriptor = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value");
+		const nativeInputValueSetter = descriptor?.set;
+		if (nativeInputValueSetter) {
+			nativeInputValueSetter.call(siteTextarea, promptToUse);
+		}
 		
 		// Trigger all possible events to ensure the framework picks it up
 		siteTextarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -175,11 +195,11 @@
 		btn.click();
 	}
 
-	function capturePromptValue(isUserClick = false) {
+	function capturePromptValue(isUserClick: boolean = false): void {
 		// Only capture on user clicks, not script-triggered clicks
 		if (!isUserClick) return;
 		
-		const textarea = document.querySelector(TEXTAREA_SELECTOR);
+		const textarea = document.querySelector(TEXTAREA_SELECTOR) as HTMLTextAreaElement | null;
 		if (textarea && textarea.value.trim() !== "") {
 			const value = textarea.value.trim();
 			lastPromptValue = value;
@@ -192,8 +212,8 @@
 		}
 	}
 
-	function copyPromptFromSite() {
-		const textarea = document.querySelector(TEXTAREA_SELECTOR);
+	function copyPromptFromSite(): void {
+		const textarea = document.querySelector(TEXTAREA_SELECTOR) as HTMLTextAreaElement | null;
 		if (textarea && textarea.value.trim() !== "") {
 			const value = textarea.value.trim();
 			lastPromptValue = value;
@@ -207,7 +227,7 @@
 		}
 	}
 
-	function showSyncIndicator(message, isWarning = false) {
+	function showSyncIndicator(message: string, isWarning: boolean = false): void {
 		if (!promptSyncIndicator) return;
 		
 		promptSyncIndicator.textContent = message;
@@ -222,7 +242,7 @@
 		}, 3000);
 	}
 
-	function checkAndAct() {
+	function checkAndAct(): void {
 		// Ensure panel still exists in DOM
 		if (panel && !document.body.contains(panel)) {
 			log("Panel removed from DOM, recreating...");
@@ -239,7 +259,7 @@
 	/************************************************************
 	 * FONT SCALING
 	 ************************************************************/
-	function updateFontSizeForWidth(width) {
+	function updateFontSizeForWidth(width: number): void {
 		const ratio = width / BASE_WIDTH;
 		let fontSize = Math.round(13 * ratio);
 		if (fontSize < MIN_FONT) fontSize = MIN_FONT;
@@ -252,10 +272,11 @@
 	/************************************************************
 	 * PANEL RESIZE (TOP-LEFT HANDLE, PANEL BOTTOM-RIGHT ANCHORED)
 	 ************************************************************/
-	function initResize(handle) {
-		handle.addEventListener("mousedown", (e) => {
+	function initResize(handle: HTMLElement): void {
+		handle.addEventListener("mousedown", (e: MouseEvent) => {
 			e.preventDefault();
 			e.stopPropagation();
+			if (!panel) return;
 			isResizing = true;
 			startX = e.clientX;
 			startY = e.clientY;
@@ -267,8 +288,8 @@
 		});
 	}
 
-	function onResizeMove(e) {
-		if (!isResizing) return;
+	function onResizeMove(e: MouseEvent): void {
+		if (!isResizing || !panel) return;
 
 		const dx = startX - e.clientX;
 		const dy = startY - e.clientY;
@@ -292,7 +313,7 @@
 		updateFontSizeForWidth(newWidth);
 	}
 
-	function stopResize() {
+	function stopResize(): void {
 		if (!isResizing) return;
 		isResizing = false;
 		document.removeEventListener("mousemove", onResizeMove);
@@ -302,36 +323,21 @@
 	/************************************************************
 	 * MINI '+' TOGGLE (DRAGGABLE)
 	 ************************************************************/
-	function createMiniToggle() {
+	function createMiniToggle(): void {
 		if (miniToggle) return;
 
 		miniToggle = document.createElement("div");
 		miniToggle.id = "grok-moderation-retry-mini-toggle";
 		miniToggle.textContent = "+";
 		miniToggle.title = "Restore Grok Auto Retry panel";
-
-		miniToggle.style.position = "fixed";
-		miniToggle.style.bottom = "16px";
-		miniToggle.style.right = "16px";
-		miniToggle.style.width = "28px";
-		miniToggle.style.height = "28px";
-		miniToggle.style.borderRadius = "999px";
-		miniToggle.style.background = "rgba(15, 23, 42, 0.95)";
-		miniToggle.style.color = "#f9fafb";
-		miniToggle.style.display = "none"; // hidden until minimized
-		miniToggle.style.alignItems = "center";
-		miniToggle.style.justifyContent = "center";
-		miniToggle.style.cursor = "pointer";
-		miniToggle.style.boxShadow = "0 4px 10px rgba(0,0,0,0.45)";
-		miniToggle.style.fontSize = "18px";
-		miniToggle.style.zIndex = "9999";
-		miniToggle.style.userSelect = "none";
+		miniToggle.className = "tw-fixed tw-bottom-4 tw-right-4 tw-w-7 tw-h-7 tw-rounded-full tw-bg-slate-900/95 tw-text-gray-50 tw-hidden tw-items-center tw-justify-center tw-cursor-pointer tw-shadow-xl tw-text-lg tw-z-[9999] tw-select-none tw-hover:bg-slate-800 tw-transition-colors";
 
 		document.body.appendChild(miniToggle);
 
 		// Dragging logic
-		miniToggle.addEventListener("mousedown", (e) => {
+		miniToggle.addEventListener("mousedown", (e: MouseEvent) => {
 			e.preventDefault();
+			if (!miniToggle) return;
 			miniDragging = true;
 			miniDragMoved = false;
 
@@ -352,8 +358,8 @@
 		});
 	}
 
-	function onMiniDragMove(e) {
-		if (!miniDragging) return;
+	function onMiniDragMove(e: MouseEvent): void {
+		if (!miniDragging || !miniToggle) return;
 		miniDragMoved = true;
 
 		const dx = e.clientX - miniStartX;
@@ -377,7 +383,7 @@
 		miniToggle.style.top = newTop + "px";
 	}
 
-	function onMiniDragEnd(e) {
+	function onMiniDragEnd(e: MouseEvent): void {
 		if (!miniDragging) return;
 		document.removeEventListener("mousemove", onMiniDragMove);
 		document.removeEventListener("mouseup", onMiniDragEnd);
@@ -391,24 +397,26 @@
 		miniDragMoved = false;
 	}
 
-	function showMiniToggle() {
+	function showMiniToggle(): void {
 		// Check if miniToggle still exists in DOM
 		if (miniToggle && !document.body.contains(miniToggle)) {
 			miniToggle = null;
 		}
 		createMiniToggle();
 		if (miniToggle) {
-			miniToggle.style.display = "flex";
+			miniToggle.classList.remove("hidden");
+			miniToggle.classList.add("flex");
 		}
 	}
 
-	function hideMiniToggle() {
+	function hideMiniToggle(): void {
 		if (miniToggle) {
-			miniToggle.style.display = "none";
+			miniToggle.classList.remove("flex");
+			miniToggle.classList.add("hidden");
 		}
 	}
 
-	function restorePanelFromMini() {
+	function restorePanelFromMini(): void {
 		isMinimized = false;
 		hideMiniToggle();
 		
@@ -432,13 +440,14 @@
 			return;
 		}
 		
-		panel.style.display = "flex";
+		panel.classList.remove("hidden");
+		panel.classList.add("flex");
 	}
 
 	/************************************************************
 	 * UI PANEL
 	 ************************************************************/
-	function createControlPanel() {
+	function createControlPanel(): void {
 		const existingPanel = document.getElementById("grok-moderation-retry-panel");
 		if (existingPanel && existingPanel === panel) {
 			return;
@@ -450,102 +459,50 @@
 
 		panel = document.createElement("div");
 		panel.id = "grok-moderation-retry-panel";
-
-		// Bottom-right anchored
-		panel.style.position = "fixed";
-		panel.style.bottom = "16px";
-		panel.style.right = "16px";
-		panel.style.zIndex = "9998";
-		panel.style.background = "rgba(15, 23, 42, 0.97)";
-		panel.style.borderRadius = "14px";
-		panel.style.boxShadow = "0 6px 18px rgba(0, 0, 0, 0.45)";
-		panel.style.color = "#f9fafb";
-		panel.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-		panel.style.display = "flex";
-		panel.style.flexDirection = "column";
-		panel.style.boxSizing = "border-box";
+		panel.className = "tw-fixed tw-bottom-4 tw-right-4 tw-z-[9998] tw-bg-slate-900/[0.97] tw-rounded-[14px] tw-shadow-2xl tw-text-gray-50 tw-font-sans tw-flex tw-flex-col tw-box-border tw-min-w-[260px] tw-min-h-[110px] tw-max-w-[520px] tw-overflow-hidden tw-p-3 tw-gap-2";
 		panel.style.width = BASE_WIDTH + "px";
-		panel.style.minWidth = "260px";
-		panel.style.minHeight = "110px";
-		panel.style.maxWidth = "520px";
-		panel.style.overflow = "hidden";
-		panel.style.padding = "10px 12px";
-		panel.style.gap = "8px";
 
 		updateFontSizeForWidth(BASE_WIDTH);
 
 		/********* Custom resize handle (top-left) *********/
 		const resizeHandle = document.createElement("div");
 		resizeHandle.title = "Drag to resize";
-		resizeHandle.style.position = "absolute";
-		resizeHandle.style.top = "4px";
-		resizeHandle.style.left = "4px";
-		resizeHandle.style.width = "10px";
-		resizeHandle.style.height = "10px";
-		resizeHandle.style.borderRadius = "3px";
-		resizeHandle.style.border = "1px solid rgba(148, 163, 184, 0.7)";
-		resizeHandle.style.background = "rgba(15, 23, 42, 0.9)";
-		resizeHandle.style.cursor = "nwse-resize";
-		resizeHandle.style.zIndex = "10000";
+		resizeHandle.className = "tw-absolute tw-top-1 tw-left-1 tw-w-2.5 tw-h-2.5 tw-rounded tw-border tw-border-slate-400/70 tw-bg-slate-900/90 tw-cursor-nwse-resize tw-z-[10000]";
 		panel.appendChild(resizeHandle);
 
 		// Content container
 		const innerWrapper = document.createElement("div");
-		innerWrapper.style.display = "flex";
-		innerWrapper.style.flexDirection = "column";
-		innerWrapper.style.gap = "8px";
-		innerWrapper.style.opacity = "0.96";
-		innerWrapper.style.paddingTop = "4px";
+		innerWrapper.className = "tw-flex tw-flex-col tw-gap-2 tw-opacity-96 tw-pt-1";
 
 		/********* Header row: title + pause + min/max *********/
 		const header = document.createElement("div");
-		header.style.display = "flex";
-		header.style.alignItems = "center";
-		header.style.justifyContent = "space-between";
-		header.style.gap = "8px";
+		header.className = "tw-flex tw-items-center tw-justify-between tw-gap-2";
 
 		const titleWrapper = document.createElement("div");
-		titleWrapper.style.display = "flex";
-		titleWrapper.style.flexDirection = "column";
+		titleWrapper.className = "tw-flex tw-flex-col";
 
 		const title = document.createElement("div");
 		title.textContent = "Grok Auto Retry";
-		title.style.fontWeight = "600";
-		title.style.fontSize = "1em";
+		title.className = "tw-font-semibold tw-text-base";
 
 		const subtitle = document.createElement("div");
 		subtitle.textContent = "Retries the video if it gets moderated";
-		subtitle.style.fontSize = "0.8em";
-		subtitle.style.color = "#9ca3af";
+		subtitle.className = "tw-text-[0.8em] tw-text-gray-400";
 
 		titleWrapper.appendChild(title);
 		titleWrapper.appendChild(subtitle);
 
 		const headerRight = document.createElement("div");
-		headerRight.style.display = "flex";
-		headerRight.style.alignItems = "center";
-		headerRight.style.gap = "0.4em";
+		headerRight.className = "tw-flex tw-items-center tw-gap-1.5";
 
 		pauseButton = document.createElement("button");
 		pauseButton.textContent = "Pause";
-		pauseButton.style.border = "none";
-		pauseButton.style.padding = "0.2em 0.8em";
-		pauseButton.style.borderRadius = "999px";
-		pauseButton.style.fontSize = "0.8em";
-		pauseButton.style.cursor = "pointer";
-		pauseButton.style.background = "rgba(248, 250, 252, 0.14)";
-		pauseButton.style.color = "#e5e7eb";
+		pauseButton.className = "tw-border-0 tw-px-3 tw-py-1 tw-rounded-full tw-text-[0.8em] tw-cursor-pointer tw-bg-slate-50/[0.14] tw-text-gray-200 tw-hover:bg-slate-50/20 tw-transition-colors";
 
 		minimizeButton = document.createElement("button");
 		minimizeButton.textContent = "–";
 		minimizeButton.title = "Minimize";
-		minimizeButton.style.border = "none";
-		minimizeButton.style.padding = "0.1em 0.7em";
-		minimizeButton.style.borderRadius = "999px";
-		minimizeButton.style.fontSize = "0.9em";
-		minimizeButton.style.cursor = "pointer";
-		minimizeButton.style.background = "rgba(31, 41, 55, 0.95)";
-		minimizeButton.style.color = "#e5e7eb";
+		minimizeButton.className = "tw-border-0 tw-px-2.5 tw-py-0.5 tw-rounded-full tw-text-[0.9em] tw-cursor-pointer tw-bg-gray-800/95 tw-text-gray-200 tw-hover:bg-gray-700 tw-transition-colors";
 
 		headerRight.appendChild(pauseButton);
 		headerRight.appendChild(minimizeButton);
@@ -556,32 +513,25 @@
 
 		/********* Divider *********/
 		const divider = document.createElement("div");
-		divider.style.height = "1px";
-		divider.style.background = "rgba(55, 65, 81, 0.9)";
-		divider.style.margin = "2px 0 4px 0";
+		divider.className = "tw-h-px tw-bg-gray-700/90 tw-my-1";
 		innerWrapper.appendChild(divider);
 
 		/********* Content wrapper *********/
 		contentWrapper = document.createElement("div");
-		contentWrapper.style.display = "flex";
-		contentWrapper.style.flexDirection = "column";
-		contentWrapper.style.gap = "8px";
+		contentWrapper.className = "tw-flex tw-flex-col tw-gap-2";
 		innerWrapper.appendChild(contentWrapper);
 
 		// Row 1: Auto retry checkbox
 		const row1 = document.createElement("label");
-		row1.style.display = "flex";
-		row1.style.alignItems = "center";
-		row1.style.gap = "0.5em";
-		row1.style.cursor = "pointer";
+		row1.className = "tw-flex tw-items-center tw-gap-2 tw-cursor-pointer";
 
 		enabledCheckbox = document.createElement("input");
 		enabledCheckbox.type = "checkbox";
-		enabledCheckbox.style.margin = "0";
+		enabledCheckbox.className = "tw-m-0 tw-cursor-pointer";
 
 		const enabledLabel = document.createElement("span");
 		enabledLabel.textContent = "Enable auto retry on moderation";
-		enabledLabel.style.fontSize = "0.9em";
+		enabledLabel.className = "tw-text-[0.9em]";
 
 		row1.appendChild(enabledCheckbox);
 		row1.appendChild(enabledLabel);
@@ -589,39 +539,20 @@
 
 		// Row 1.5: Prompt textarea with controls
 		const promptRow = document.createElement("div");
-		promptRow.style.display = "flex";
-		promptRow.style.flexDirection = "column";
-		promptRow.style.gap = "0.3em";
+		promptRow.className = "tw-flex tw-flex-col tw-gap-1";
 
 		// Header with label and copy button
 		const promptHeader = document.createElement("div");
-		promptHeader.style.display = "flex";
-		promptHeader.style.justifyContent = "space-between";
-		promptHeader.style.alignItems = "center";
+		promptHeader.className = "tw-flex tw-justify-between tw-items-center";
 
 		const promptLabel = document.createElement("label");
 		promptLabel.textContent = "Prompt to retry with:";
-		promptLabel.style.fontSize = "0.8em";
-		promptLabel.style.color = "#9ca3af";
-		promptLabel.style.fontWeight = "500";
+		promptLabel.className = "tw-text-[0.8em] tw-text-gray-400 tw-font-medium";
 
 		copyFromSiteBtn = document.createElement("button");
 		copyFromSiteBtn.textContent = "📋 Copy from site";
 		copyFromSiteBtn.title = "Copy the current prompt from the site's textarea";
-		copyFromSiteBtn.style.border = "none";
-		copyFromSiteBtn.style.padding = "0.15em 0.6em";
-		copyFromSiteBtn.style.borderRadius = "999px";
-		copyFromSiteBtn.style.fontSize = "0.75em";
-		copyFromSiteBtn.style.cursor = "pointer";
-		copyFromSiteBtn.style.background = "rgba(59, 130, 246, 0.2)";
-		copyFromSiteBtn.style.color = "#60a5fa";
-		copyFromSiteBtn.style.transition = "all 0.2s";
-		copyFromSiteBtn.addEventListener("mouseenter", () => {
-			copyFromSiteBtn.style.background = "rgba(59, 130, 246, 0.3)";
-		});
-		copyFromSiteBtn.addEventListener("mouseleave", () => {
-			copyFromSiteBtn.style.background = "rgba(59, 130, 246, 0.2)";
-		});
+		copyFromSiteBtn.className = "tw-border-0 tw-px-2 tw-py-0.5 tw-rounded-full tw-text-[0.75em] tw-cursor-pointer tw-bg-blue-500/20 tw-text-blue-400 tw-hover:bg-blue-500/30 tw-transition-all tw-duration-200";
 		copyFromSiteBtn.addEventListener("click", copyPromptFromSite);
 
 		promptHeader.appendChild(promptLabel);
@@ -629,46 +560,23 @@
 
 		// Textarea wrapper for border animation
 		const textareaWrapper = document.createElement("div");
-		textareaWrapper.style.position = "relative";
+		textareaWrapper.className = "tw-relative";
 
 		promptTextarea = document.createElement("textarea");
 		promptTextarea.placeholder = "Click 'Copy from site' or type your prompt here...";
 		promptTextarea.value = lastPromptValue;
 		promptTextarea.rows = 3;
-		promptTextarea.style.width = "100%";
-		promptTextarea.style.fontSize = "0.85em";
-		promptTextarea.style.padding = "0.5em";
-		promptTextarea.style.borderRadius = "0.5em";
-		promptTextarea.style.border = "1px solid rgba(148, 163, 184, 0.9)";
-		promptTextarea.style.background = "rgba(15, 23, 42, 0.98)";
-		promptTextarea.style.color = "#f9fafb";
-		promptTextarea.style.boxSizing = "border-box";
-		promptTextarea.style.resize = "vertical";
-		promptTextarea.style.fontFamily = "inherit";
-		promptTextarea.style.transition = "border-color 0.2s";
+		promptTextarea.className = "tw-w-full tw-text-[0.85em] tw-p-2 tw-rounded-lg tw-border tw-border-slate-400/90 tw-bg-slate-900/[0.98] tw-text-gray-50 tw-box-border tw-resize-y tw-font-[inherit] tw-transition-colors tw-focus:border-blue-400/90 tw-focus:outline-none";
 
 		promptTextarea.addEventListener("input", () => {
-			lastPromptValue = promptTextarea.value;
-		});
-
-		promptTextarea.addEventListener("focus", () => {
-			promptTextarea.style.borderColor = "rgba(96, 165, 250, 0.9)";
-		});
-
-		promptTextarea.addEventListener("blur", () => {
-			promptTextarea.style.borderColor = "rgba(148, 163, 184, 0.9)";
+			if (promptTextarea) lastPromptValue = promptTextarea.value;
 		});
 
 		textareaWrapper.appendChild(promptTextarea);
 
 		// Sync indicator
 		promptSyncIndicator = document.createElement("div");
-		promptSyncIndicator.style.fontSize = "0.75em";
-		promptSyncIndicator.style.color = "#34d399";
-		promptSyncIndicator.style.marginTop = "0.2em";
-		promptSyncIndicator.style.opacity = "0";
-		promptSyncIndicator.style.transition = "opacity 0.3s";
-		promptSyncIndicator.style.minHeight = "1em";
+		promptSyncIndicator.className = "tw-text-[0.75em] tw-text-emerald-400 tw-mt-1 tw-opacity-0 tw-transition-opacity tw-duration-300 tw-min-h-[1em]";
 
 		promptRow.appendChild(promptHeader);
 		promptRow.appendChild(textareaWrapper);
@@ -702,56 +610,29 @@
 		retriesBlock.appendChild(retryInfoSpan);
 
 		const maxBlock = document.createElement("div");
-		maxBlock.style.display = "flex";
-		maxBlock.style.flexDirection = "column";
-		maxBlock.style.alignItems = "flex-end";
-		maxBlock.style.gap = "0.3em";
+		maxBlock.className = "tw-flex tw-flex-col tw-items-end tw-gap-1";
 
 		const maxLabel = document.createElement("span");
 		maxLabel.textContent = "Max retries";
-		maxLabel.style.fontSize = "0.8em";
-		maxLabel.style.color = "#9ca3af";
+		maxLabel.className = "tw-text-[0.8em] tw-text-gray-400";
 
 		const maxControls = document.createElement("div");
-		maxControls.style.display = "flex";
-		maxControls.style.alignItems = "center";
-		maxControls.style.gap = "0.3em";
+		maxControls.className = "tw-flex tw-items-center tw-gap-1";
 
 		const minusBtn = document.createElement("button");
 		minusBtn.textContent = "–";
-		minusBtn.style.border = "none";
-		minusBtn.style.padding = "0.2em 0.8em";
-		minusBtn.style.borderRadius = "999px";
-		minusBtn.style.fontSize = "0.95em";
-		minusBtn.style.cursor = "pointer";
-		minusBtn.style.background = "rgba(31, 41, 55, 0.95)";
-		minusBtn.style.color = "#e5e7eb";
+		minusBtn.className = "tw-border-0 tw-px-3 tw-py-1 tw-rounded-full tw-text-[0.95em] tw-cursor-pointer tw-bg-gray-800/95 tw-text-gray-200 tw-hover:bg-gray-700 tw-transition-colors";
 
 		maxRetriesInput = document.createElement("input");
 		maxRetriesInput.type = "number";
 		maxRetriesInput.min = String(MIN_RETRIES_HARD_LIMIT);
 		maxRetriesInput.max = String(MAX_RETRIES_HARD_LIMIT);
 		maxRetriesInput.value = String(maxRetries);
-		maxRetriesInput.style.width = "4.2em";
-		maxRetriesInput.style.height = "1.6em";
-		maxRetriesInput.style.fontSize = "0.9em";
-		maxRetriesInput.style.padding = "0.1em 0.4em";
-		maxRetriesInput.style.borderRadius = "0.6em";
-		maxRetriesInput.style.border = "1px solid rgba(148, 163, 184, 0.9)";
-		maxRetriesInput.style.background = "rgba(15, 23, 42, 0.98)";
-		maxRetriesInput.style.color = "#f9fafb";
-		maxRetriesInput.style.boxSizing = "border-box";
-		maxRetriesInput.style.textAlign = "center";
+		maxRetriesInput.className = "tw-w-[4.2em] tw-h-[1.6em] tw-text-[0.9em] tw-px-1.5 tw-py-0.5 tw-rounded-lg tw-border tw-border-slate-400/90 tw-bg-slate-900/[0.98] tw-text-gray-50 tw-box-border tw-text-center tw-focus:outline-none tw-focus:border-blue-400/90";
 
 		const plusBtn = document.createElement("button");
 		plusBtn.textContent = "+";
-		plusBtn.style.border = "none";
-		plusBtn.style.padding = "0.2em 0.8em";
-		plusBtn.style.borderRadius = "999px";
-		plusBtn.style.fontSize = "0.95em";
-		plusBtn.style.cursor = "pointer";
-		plusBtn.style.background = "rgba(31, 41, 55, 0.95)";
-		plusBtn.style.color = "#e5e7eb";
+		plusBtn.className = "tw-border-0 tw-px-3 tw-py-1 tw-rounded-full tw-text-[0.95em] tw-cursor-pointer tw-bg-gray-800/95 tw-text-gray-200 tw-hover:bg-gray-700 tw-transition-colors";
 
 		maxControls.appendChild(minusBtn);
 		maxControls.appendChild(maxRetriesInput);
@@ -766,24 +647,15 @@
 
 		// Row 3: reset + hint
 		const row3 = document.createElement("div");
-		row3.style.display = "flex";
-		row3.style.justifyContent = "space-between";
-		row3.style.alignItems = "center";
+		row3.className = "tw-flex tw-justify-between tw-items-center";
 
 		const tip = document.createElement("span");
 		tip.textContent = "You can pause at any time.";
-		tip.style.fontSize = "0.75em";
-		tip.style.color = "#9ca3af";
+		tip.className = "tw-text-[0.75em] tw-text-gray-400";
 
 		const resetBtn = document.createElement("button");
 		resetBtn.textContent = "Reset count";
-		resetBtn.style.border = "none";
-		resetBtn.style.padding = "0.25em 0.8em";
-		resetBtn.style.borderRadius = "999px";
-		resetBtn.style.fontSize = "0.8em";
-		resetBtn.style.cursor = "pointer";
-		resetBtn.style.background = "rgba(37, 99, 235, 0.95)";
-		resetBtn.style.color = "#e5e7eb";
+		resetBtn.className = "tw-border-0 tw-px-3 tw-py-1 tw-rounded-full tw-text-[0.8em] tw-cursor-pointer tw-bg-blue-600/95 tw-text-gray-200 tw-hover:bg-blue-600 tw-transition-colors";
 
 		row3.appendChild(tip);
 		row3.appendChild(resetBtn);
@@ -797,13 +669,13 @@
 		initResize(resizeHandle);
 
 		enabledCheckbox.addEventListener("change", () => {
-			autoRetryEnabled = enabledCheckbox.checked;
+			if (enabledCheckbox) autoRetryEnabled = enabledCheckbox.checked;
 			log("Auto retry enabled:", autoRetryEnabled);
 			updatePageTitle();
 		});
 
 		maxRetriesInput.addEventListener("change", () => {
-			setMaxRetries(maxRetriesInput.value);
+			if (maxRetriesInput) setMaxRetries(maxRetriesInput.value);
 		});
 
 		minusBtn.addEventListener("click", () => {
@@ -823,15 +695,27 @@
 
 		pauseButton.addEventListener("click", () => {
 			isPaused = !isPaused;
-			pauseButton.textContent = isPaused ? "Resume" : "Pause";
-			pauseButton.style.background = isPaused ? "rgba(248, 250, 252, 0.24)" : "rgba(248, 250, 252, 0.14)";
+			if (pauseButton) {
+				pauseButton.textContent = isPaused ? "Resume" : "Pause";
+				// Toggle background opacity for paused state
+				if (isPaused) {
+					pauseButton.classList.add("bg-slate-50/[0.24]");
+					pauseButton.classList.remove("bg-slate-50/[0.14]");
+				} else {
+					pauseButton.classList.add("bg-slate-50/[0.14]");
+					pauseButton.classList.remove("bg-slate-50/[0.24]");
+				}
+			}
 			log("Paused state:", isPaused);
 			updatePageTitle();
 		});
 
 		minimizeButton.addEventListener("click", () => {
 			isMinimized = true;
-			panel.style.display = "none";
+			if (panel) {
+				panel.classList.remove("flex");
+				panel.classList.add("hidden");
+			}
 			showMiniToggle();
 		});
 
@@ -844,12 +728,15 @@
 	/************************************************************
 	 * OBSERVER + INIT
 	 ************************************************************/
-	const observer = new MutationObserver(() => {
+	const observer: MutationObserver = new MutationObserver(() => {
 		checkAndAct();
 	});
 
-	function startObserver() {
+	function startObserver(): void {
 		if (!document.body) return;
+
+		// Inject Tailwind CSS
+		injectTailwind();
 
 		// Capture original page title
 		originalPageTitle = document.title;
@@ -857,9 +744,9 @@
 		createControlPanel();
 
 		// Capture prompt value whenever the "Make video" button is clicked by user
-		document.addEventListener('click', (e) => {
+		document.addEventListener('click', (e: MouseEvent) => {
 			// Check if the clicked element or any parent is the Make video button
-			let element = e.target;
+			let element = e.target as HTMLElement | null;
 			while (element && element !== document.body) {
 				if (element.matches && element.matches(BUTTON_SELECTOR)) {
 					// Check if this is a trusted user event (not programmatically triggered)
