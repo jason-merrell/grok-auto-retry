@@ -2,7 +2,10 @@ import { useState, useCallback, useEffect } from 'react';
 import { usePostStorage } from './useSessionStorage';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
-const BUTTON_SELECTOR = 'button[aria-label="Make video"]';
+const BUTTON_SELECTORS = [
+  'button[aria-label="Redo"]',      // For retries after first generation
+  'button[aria-label="Make video"]' // For first generation
+];
 const TEXTAREA_SELECTOR = 'textarea[aria-label="Make a video"][placeholder="Type to customize video..."]';
 
 export const useGrokRetry = (postId: string | null) => {
@@ -59,9 +62,18 @@ export const useGrokRetry = (postId: string | null) => {
       return false;
     }
 
-    const button = document.querySelector<HTMLButtonElement>(BUTTON_SELECTOR);
+    // Try to find the button using either selector
+    let button: HTMLButtonElement | null = null;
+    for (const selector of BUTTON_SELECTORS) {
+      button = document.querySelector<HTMLButtonElement>(selector);
+      if (button) {
+        console.log('[Grok Retry] Found button with selector:', selector);
+        break;
+      }
+    }
+    
     if (!button) {
-      console.log('[Grok Retry] Button not found');
+      console.log('[Grok Retry] Button not found with any selector');
       return false;
     }
 
