@@ -24,6 +24,7 @@ interface ControlPanelProps {
   onResetRetries: () => void;
   onPromptChange: (value: string) => void;
   onCopyFromSite: () => void;
+  onCopyToSite: () => void;
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -43,6 +44,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   onResetRetries,
   onPromptChange,
   onCopyFromSite,
+  onCopyToSite,
 }) => {
   return (
     <Card 
@@ -90,6 +92,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           value={promptValue}
           onChange={onPromptChange}
           onCopyFromSite={onCopyFromSite}
+          onCopyToSite={onCopyToSite}
         />
       </CardContent>
     </Card>

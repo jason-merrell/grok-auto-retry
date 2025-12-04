@@ -19,7 +19,7 @@ const App: React.FC = () => {
   
   const retry = useGrokRetry(postId);
   const { data: uiPrefs, save: saveUIPref } = useStorage();
-  const { capturePromptFromSite, setupClickListener } = usePromptCapture();
+  const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
   const panelResize = usePanelResize();
   const miniDrag = useMiniToggleDrag();
 
@@ -74,6 +74,12 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCopyToSite = () => {
+    if (retry.lastPromptValue) {
+      copyPromptToSite(retry.lastPromptValue);
+    }
+  };
+
   const handleMinimizeClick = () => {
     if (!miniDrag.dragMoved) {
       saveUIPref('isMinimized', !uiPrefs.isMinimized);
@@ -121,6 +127,7 @@ const App: React.FC = () => {
           onResetRetries={retry.resetRetries}
           onPromptChange={retry.updatePromptValue}
           onCopyFromSite={handleCopyFromSite}
+          onCopyToSite={handleCopyToSite}
         />
       </TooltipProvider>
     </div>
