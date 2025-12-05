@@ -23,9 +23,19 @@ const App: React.FC = () => {
   const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
   const panelResize = usePanelResize();
   const miniDrag = useMiniToggleDrag();
+  const [rapidFailureDetected, setRapidFailureDetected] = React.useState(false);
 
   // Handle moderation detection
   const handleModerationDetected = React.useCallback(() => {
+    // Check for rapid failure (≤6 seconds) - indicates pre-flight moderation filter
+    if (retry.isSessionActive && retry.lastAttemptTime > 0) {
+      const timeSinceAttempt = Date.now() - retry.lastAttemptTime;
+      if (timeSinceAttempt <= 6000) {
+        console.warn('[Grok Retry] Rapid failure detected (<6s) - likely pre-flight moderation filter on prompt text');
+        setRapidFailureDetected(true);
+      }
+    }
+
     // Check if we should retry
     const shouldRetry = retry.autoRetryEnabled && retry.retryCount < retry.maxRetries;
     
@@ -146,6 +156,7 @@ const App: React.FC = () => {
       }
     }
     
+    setRapidFailureDetected(false);
     retry.startSession();
     retry.clickMakeVideoButton(promptToUse);
   };
@@ -200,6 +211,7 @@ const App: React.FC = () => {
           videosGenerated={retry.videosGenerated}
           promptValue={retry.lastPromptValue}
           isSessionActive={retry.isSessionActive}
+          rapidFailureDetected={rapidFailureDetected}
           onResizeStart={panelResize.handleResizeStart}
           onMinimize={() => saveUIPref('isMinimized', true)}
           onMaximizeToggle={handleMaximizeToggle}

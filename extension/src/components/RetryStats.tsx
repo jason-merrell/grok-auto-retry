@@ -1,12 +1,15 @@
 import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { AlertTriangle } from 'lucide-react';
 
 interface RetryStatsProps {
   retryCount: number;
   maxRetries: number;
   videosGenerated: number;
   videoGoal: number;
+  rapidFailureDetected: boolean;
 }
 
 export const RetryStats: React.FC<RetryStatsProps> = ({
@@ -14,6 +17,7 @@ export const RetryStats: React.FC<RetryStatsProps> = ({
   maxRetries,
   videosGenerated,
   videoGoal,
+  rapidFailureDetected,
 }) => {
   // Retry badge logic: green (0%) -> orange (50%+) -> red (80%+)
   const retryPercentage = maxRetries > 0 ? (retryCount / maxRetries) * 100 : 0;
@@ -41,7 +45,27 @@ export const RetryStats: React.FC<RetryStatsProps> = ({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label className="text-sm">Retries Used</Label>
+        <div className="flex items-center gap-2">
+          <Label className="text-sm">Retries Used</Label>
+          {rapidFailureDetected && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AlertTriangle className="h-4 w-4 text-red-500 cursor-help animate-pulse" />
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs">
+                <p className="font-semibold mb-1">Rapid Moderation Failure</p>
+                <p className="text-xs mb-2">
+                  Your video generation failed in less than 6 seconds, which strongly suggests
+                  your prompt text is triggering the pre-flight moderation filter.
+                </p>
+                <p className="text-xs">
+                  Consider rephrasing your prompt, removing sensitive keywords, or trying
+                  a completely different prompt. Rapid failures are unlikely to succeed with continued retries.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
         <Badge className={retryClassName}>
           {retryCount} / {maxRetries}
         </Badge>

@@ -28,6 +28,7 @@ export const useGrokRetry = (postId: string | null) => {
   const isSessionActive = postData.isSessionActive;
   const videoGoal = postData.videoGoal;
   const videosGenerated = postData.videosGenerated;
+  const lastAttemptTime = postData.lastAttemptTime;
 
   const setMaxRetries = useCallback((value: number) => {
     const clamped = Math.max(1, Math.min(50, value));
@@ -130,6 +131,7 @@ export const useGrokRetry = (postId: string | null) => {
     const newCount = retryCount + 1;
     save('retryCount', newCount);
     save('isSessionActive', true);
+    save('lastAttemptTime', now);
     console.log('[Grok Retry] Clicked button, retry count:', retryCount, '->', newCount);
     
     return true;
@@ -145,6 +147,7 @@ export const useGrokRetry = (postId: string | null) => {
     isSessionActive,
     videoGoal,
     videosGenerated,
+    lastAttemptTime,
     
     // Actions
     setMaxRetries,

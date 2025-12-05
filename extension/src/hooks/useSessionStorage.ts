@@ -8,6 +8,7 @@ export interface PostData {
   isSessionActive: boolean;
   videoGoal: number;
   videosGenerated: number;
+  lastAttemptTime: number;
 }
 
 const DEFAULT_POST_DATA: PostData = {
@@ -18,6 +19,7 @@ const DEFAULT_POST_DATA: PostData = {
   isSessionActive: false,
   videoGoal: 1,
   videosGenerated: 0,
+  lastAttemptTime: 0,
 };
 
 const STORAGE_PREFIX = 'grokRetryPost_';

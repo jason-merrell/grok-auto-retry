@@ -22,6 +22,7 @@ interface ControlPanelProps {
   videosGenerated: number;
   promptValue: string;
   isSessionActive: boolean;
+  rapidFailureDetected: boolean;
   onResizeStart: (e: React.MouseEvent) => void;
   onMinimize: () => void;
   onMaximizeToggle: () => void;
@@ -49,6 +50,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   videosGenerated,
   promptValue,
   isSessionActive,
+  rapidFailureDetected,
   onResizeStart,
   onMinimize,
   onMaximizeToggle,
@@ -108,6 +110,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           maxRetries={maxRetries}
           videosGenerated={videosGenerated}
           videoGoal={videoGoal}
+          rapidFailureDetected={rapidFailureDetected}
         />
         
         <MaxRetriesControls 
