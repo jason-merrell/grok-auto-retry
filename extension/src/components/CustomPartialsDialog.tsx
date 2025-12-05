@@ -3,10 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PromptPartial } from "@/config/promptPartials";
-import { Trash2, Plus, Edit2 } from "lucide-react";
+import { Trash2, Plus, Edit2, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface CustomPartialsDialogProps {
 	open: boolean;
@@ -81,168 +84,231 @@ export const CustomPartialsDialog: React.FC<CustomPartialsDialogProps> = ({
 	const canSave = formData.label.trim() && formData.content.trim();
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-				<DialogHeader>
-					<DialogTitle>Manage Custom Prompt Partials</DialogTitle>
-				</DialogHeader>
+		<Sheet open={open} onOpenChange={onOpenChange}>
+			<SheetContent
+				side="bottom"
+				className="h-[calc(100vh-30px)] overflow-hidden flex flex-col text-card-foreground"
+				container={document.getElementById("grok-retry-root")}
+			>
+				<SheetHeader className="shrink-0">
+					<SheetTitle className="text-card-foreground">Manage Custom Prompt Partials</SheetTitle>
+					<SheetDescription>
+						Create and manage your own reusable prompt partials for quick insertion.
+					</SheetDescription>
+				</SheetHeader>
 
-				<div className="flex-1 overflow-y-auto space-y-4">
-					{/* Form Section */}
-					<div className="space-y-3 p-4 border rounded-lg">
-						<div className="text-sm font-medium">{editingId ? "Edit Partial" : "Add New Partial"}</div>
+				<div className="flex-1 mt-6 overflow-hidden flex gap-6">
+					{/* Left Side - Form */}
+					<div className="w-96 shrink-0 space-y-4">
+						<div className="p-5 border rounded-lg bg-accent/5 space-y-4">
+							<div className="flex items-center justify-between pb-2 border-b">
+								<div className="text-base font-semibold">
+									{editingId ? "Edit Partial" : "Add New Partial"}
+								</div>
+								{editingId && (
+									<Button onClick={resetForm} variant="ghost" size="sm">
+										<X className="h-3 w-3 mr-1" />
+										Cancel
+									</Button>
+								)}
+							</div>
 
-						<div className="space-y-2">
-							<Label htmlFor="label">Label *</Label>
-							<Input
-								id="label"
-								placeholder="e.g., My Custom Style"
-								value={formData.label}
-								onChange={(e) => setFormData({ ...formData, label: e.target.value })}
-							/>
-						</div>
+							<div className="space-y-3">
+								<div className="space-y-2">
+									<Label htmlFor="label" className="text-sm font-medium">
+										Label *
+									</Label>
+									<Input
+										id="label"
+										placeholder="e.g., My Custom Style"
+										value={formData.label}
+										onChange={(e) => setFormData({ ...formData, label: e.target.value })}
+									/>
+								</div>
 
-						<div className="space-y-2">
-							<Label htmlFor="description">Description</Label>
-							<Input
-								id="description"
-								placeholder="Brief description of what this partial does"
-								value={formData.description}
-								onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-							/>
-						</div>
+								<div className="space-y-2">
+									<Label htmlFor="description" className="text-sm font-medium">
+										Description
+									</Label>
+									<Input
+										id="description"
+										placeholder="Brief description"
+										value={formData.description}
+										onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+									/>
+								</div>
 
-						<div className="space-y-2">
-							<Label htmlFor="content">Content *</Label>
-							<Textarea
-								id="content"
-								placeholder="The text to add to the prompt"
-								value={formData.content}
-								onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-								rows={3}
-							/>
-						</div>
+								<div className="space-y-2">
+									<Label htmlFor="content" className="text-sm font-medium">
+										Content *
+									</Label>
+									<Textarea
+										id="content"
+										placeholder="The text to add to the prompt"
+										value={formData.content}
+										onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+										rows={6}
+										className="resize-none"
+									/>
+								</div>
 
-						<div className="space-y-2">
-							<Label htmlFor="categories">Categories (comma-separated)</Label>
-							<Input
-								id="categories"
-								placeholder="e.g., Style, Lighting, Custom"
-								value={formData.categories}
-								onChange={(e) => setFormData({ ...formData, categories: e.target.value })}
-							/>
-						</div>
+								<div className="space-y-2">
+									<Label htmlFor="categories" className="text-sm font-medium">
+										Categories
+									</Label>
+									<Input
+										id="categories"
+										placeholder="e.g., Style, Lighting, Custom"
+										value={formData.categories}
+										onChange={(e) => setFormData({ ...formData, categories: e.target.value })}
+									/>
+									<p className="text-xs text-muted-foreground">Comma-separated</p>
+								</div>
 
-						<div className="space-y-2">
-							<Label htmlFor="position">Position</Label>
-							<div className="flex gap-2">
-								<Button
-									type="button"
-									variant={formData.position === "prepend" ? "default" : "outline"}
-									size="sm"
-									onClick={() => setFormData({ ...formData, position: "prepend" })}
-								>
-									Prepend (Before)
-								</Button>
-								<Button
-									type="button"
-									variant={formData.position === "append" ? "default" : "outline"}
-									size="sm"
-									onClick={() => setFormData({ ...formData, position: "append" })}
-								>
-									Append (After)
+								<div className="space-y-2">
+									<Label className="text-sm font-medium">Position</Label>
+									<div className="flex gap-2">
+										<Button
+											type="button"
+											variant={formData.position === "prepend" ? "default" : "outline"}
+											size="sm"
+											className={cn(
+												"flex-1",
+												formData.position === "prepend"
+													? "bg-primary text-primary-foreground"
+													: "text-card-foreground border-card-foreground/30"
+											)}
+											onClick={() => setFormData({ ...formData, position: "prepend" })}
+										>
+											↑ Before
+										</Button>
+										<Button
+											type="button"
+											variant={formData.position === "append" ? "default" : "outline"}
+											size="sm"
+											className={cn(
+												"flex-1",
+												formData.position === "append"
+													? "bg-primary text-primary-foreground"
+													: "text-card-foreground border-card-foreground/30"
+											)}
+											onClick={() => setFormData({ ...formData, position: "append" })}
+										>
+											↓ After
+										</Button>
+									</div>
+								</div>
+
+								<Button onClick={handleSave} disabled={!canSave} className="w-full mt-4">
+									<Plus className="h-4 w-4 mr-2" />
+									{editingId ? "Update" : "Add"} Partial
 								</Button>
 							</div>
-						</div>
-
-						<div className="flex gap-2">
-							<Button onClick={handleSave} disabled={!canSave} size="sm">
-								<Plus className="h-3 w-3 mr-1" />
-								{editingId ? "Update" : "Add"} Partial
-							</Button>
-							{editingId && (
-								<Button onClick={resetForm} variant="outline" size="sm">
-									Cancel Edit
-								</Button>
-							)}
 						</div>
 					</div>
 
-					{/* List Section */}
-					<div className="space-y-2">
-						<div className="text-sm font-medium">Your Custom Partials ({customPartials.length})</div>
+					{/* Right Side - Table */}
+					<div className="flex-1 min-w-0 flex flex-col">
+						<div className="flex items-center justify-between mb-4 pb-3 border-b">
+							<div className="text-base font-semibold">Your Custom Partials</div>
+							<Badge variant="secondary" className="text-sm px-3 py-1">
+								{customPartials.length} {customPartials.length === 1 ? "Partial" : "Partials"}
+							</Badge>
+						</div>
+
 						{customPartials.length === 0 ? (
-							<div className="text-sm text-muted-foreground p-4 text-center border rounded-lg">
-								No custom partials yet. Create one above to get started!
+							<div className="flex-1 flex items-center justify-center">
+								<div className="text-center text-muted-foreground p-12 border-2 border-dashed rounded-lg">
+									<Plus className="h-12 w-12 mx-auto mb-3 opacity-40" />
+									<p className="text-lg font-medium mb-1">No custom partials yet</p>
+									<p className="text-sm">Create one using the form to get started!</p>
+								</div>
 							</div>
 						) : (
-							<div className="space-y-2">
-								{customPartials.map((partial) => (
-									<div
-										key={partial.id}
-										className="flex items-start gap-2 p-3 border rounded-lg hover:bg-accent/50"
-									>
-										<div className="flex-1 min-w-0">
-											<div className="font-medium text-sm">{partial.label}</div>
-											{partial.description && (
-												<div className="text-xs text-muted-foreground mt-1">
-													{partial.description}
-												</div>
-											)}
-											<div className="text-xs text-muted-foreground mt-1 font-mono">
-												{partial.content}
-											</div>
-											{partial.categories && partial.categories.length > 0 && (
-												<div className="flex gap-1 mt-2">
-													{partial.categories.map((cat) => (
-														<span key={cat} className="text-xs px-2 py-0.5 bg-secondary rounded">
-															{cat}
-														</span>
-													))}
-												</div>
-											)}
-										</div>
-										<div className="flex gap-1 shrink-0">
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														variant="ghost"
-														size="icon"
-														className="h-7 w-7"
-														onClick={() => handleEdit(partial)}
+							<div className="flex-1 overflow-auto border rounded-lg">
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead className="w-[180px]">Label</TableHead>
+											<TableHead className="w-[200px]">Description</TableHead>
+											<TableHead>Content</TableHead>
+											<TableHead className="w-[150px]">Categories</TableHead>
+											<TableHead className="w-[120px] text-center">Position</TableHead>
+											<TableHead className="w-[100px] text-center">Actions</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{customPartials.map((partial) => (
+											<TableRow key={partial.id} className="hover:bg-accent/30">
+												<TableCell className="font-medium">{partial.label}</TableCell>
+												<TableCell className="text-sm text-muted-foreground">
+													{partial.description || <span className="italic opacity-50">—</span>}
+												</TableCell>
+												<TableCell>
+													<div className="text-xs font-mono bg-muted/50 p-2 rounded border max-w-md truncate">
+														{partial.content}
+													</div>
+												</TableCell>
+												<TableCell>
+													{partial.categories && partial.categories.length > 0 ? (
+														<div className="flex flex-wrap gap-1">
+															{partial.categories.map((cat) => (
+																<Badge key={cat} variant="secondary" className="text-xs">
+																	{cat}
+																</Badge>
+															))}
+														</div>
+													) : (
+														<span className="text-sm italic opacity-50">—</span>
+													)}
+												</TableCell>
+												<TableCell className="text-center">
+													<Badge
+														variant="outline"
+														className="text-xs text-card-foreground border-card-foreground/20"
 													>
-														<Edit2 className="h-3 w-3" />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent>Edit</TooltipContent>
-											</Tooltip>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														variant="ghost"
-														size="icon"
-														className="h-7 w-7 text-destructive"
-														onClick={() => onDelete(partial.id)}
-													>
-														<Trash2 className="h-3 w-3" />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent>Delete</TooltipContent>
-											</Tooltip>
-										</div>
-									</div>
-								))}
+														{partial.position === "prepend" ? "↑ Before" : "↓ After"}
+													</Badge>
+												</TableCell>
+												<TableCell>
+													<div className="flex gap-1 justify-center">
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	className="h-8 w-8"
+																	onClick={() => handleEdit(partial)}
+																>
+																	<Edit2 className="h-3.5 w-3.5" />
+																</Button>
+															</TooltipTrigger>
+															<TooltipContent>Edit</TooltipContent>
+														</Tooltip>
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	className="h-8 w-8 text-destructive hover:text-destructive"
+																	onClick={() => onDelete(partial.id)}
+																>
+																	<Trash2 className="h-3.5 w-3.5" />
+																</Button>
+															</TooltipTrigger>
+															<TooltipContent>Delete</TooltipContent>
+														</Tooltip>
+													</div>
+												</TableCell>
+											</TableRow>
+										))}
+									</TableBody>
+								</Table>
 							</div>
 						)}
 					</div>
 				</div>
-
-				<DialogFooter>
-					<Button variant="outline" onClick={() => onOpenChange(false)}>
-						Close
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
+			</SheetContent>
+		</Sheet>
 	);
 };
