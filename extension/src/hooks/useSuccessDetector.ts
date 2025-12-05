@@ -38,8 +38,14 @@ export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) =>
             }
         }
 
+        // Check for "Next video" button - if present, video src changes are from manual navigation
+        const hasNextVideoButton = document.querySelector('button[aria-label="Next video"]') !== null;
+
+        // If next video button is present, ignore video src changes (user is browsing previous videos)
+        const validVideoChange = videoChanged && !hasNextVideoButton;
+
         // Require both conditions to declare success
-        if (buttonInSuccessState && videoChanged) {
+        if (buttonInSuccessState && validVideoChange) {
             const now = Date.now();
             if (now - lastSuccessAtRef.current >= 300) {
                 lastSuccessAtRef.current = now;
@@ -48,6 +54,11 @@ export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) =>
                 onSuccess();
                 return;
             }
+        }
+
+        // Log when next video button prevents false positive
+        if (buttonInSuccessState && videoChanged && hasNextVideoButton) {
+            console.log('[Grok Retry] Success detection blocked - next video button present (user browsing previous videos)');
         }
     }, [lastVideoSrc, isEnabled, onSuccess]);
 

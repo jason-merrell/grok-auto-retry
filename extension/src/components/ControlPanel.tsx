@@ -73,6 +73,25 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 	showDebug,
 	setShowDebug,
 }) => {
+	const logsContainerRef = React.useRef<HTMLDivElement>(null);
+	const [isUserScrolledUp, setIsUserScrolledUp] = React.useState(false);
+
+	// Auto-scroll to bottom when new logs arrive, unless user has scrolled up
+	React.useEffect(() => {
+		if (showDebug && logs.length > 0 && !isUserScrolledUp && logsContainerRef.current) {
+			logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+		}
+	}, [logs, showDebug, isUserScrolledUp]);
+
+	// Handle scroll events to detect if user scrolled away from bottom
+	const handleScroll = React.useCallback(() => {
+		if (logsContainerRef.current) {
+			const { scrollTop, scrollHeight, clientHeight } = logsContainerRef.current;
+			const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10; // 10px threshold
+			setIsUserScrolledUp(!isAtBottom);
+		}
+	}, []);
+
 	return (
 		<Card
 			className="fixed shadow-xl flex flex-col bg-background"
@@ -112,8 +131,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 			</CardHeader>
 
 			<CardContent
+				ref={logsContainerRef}
 				className="space-y-3 overflow-auto flex-1"
 				style={isMaximized ? {} : { maxHeight: `${height - 140}px` }}
+				onScroll={handleScroll}
 			>
 				{showDebug ? (
 					<div className="font-mono text-xs whitespace-pre-wrap break-words">
