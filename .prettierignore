@@ -1,0 +1,11 @@
+cache
+.cache
+package.json
+package-lock.json
+.yarn
+dist
+node_modules
+build
+.contentlayer
+**/*.md
+**/*.hbs

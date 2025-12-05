@@ -1,0 +1,22 @@
+{
+    "typescript.tsdk": "./node_modules/typescript/lib",
+    "files.associations": {
+        "*.ts.ejs": "typescript",
+        "*.yml": "yaml"
+    },
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.formatOnType": false,
+    "editor.formatOnPaste": false,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "always"
+    },
+    "eslint.codeActionsOnSave.rules": [
+        "tailwindcss/classnames-order",
+        "tailwindcss/enforces-shorthand",
+        "tailwindcss/migration-from-tailwind-2",
+        "tailwindcss/no-unnecessary-arbitrary-value"
+    ],
+    "eslint.validate": ["typescriptreact", "typescript", "javascriptreact", "javascript"],
+    "tailwindCSS.experimental.classRegex": [["ui:\\s*{([^)]*)\\s*}", "[\"'`]([^\"'`]*).*?[\"'`]"]]
+}

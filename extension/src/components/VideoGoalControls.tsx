@@ -20,18 +20,41 @@ export const VideoGoalControls: React.FC<VideoGoalControlsProps> = ({
   onVideoGoalChange,
   disabled = false,
 }) => {
+  const [inputValue, setInputValue] = React.useState(videoGoal.toString());
+
   const handleIncrement = () => {
-    onVideoGoalChange(videoGoal + 1);
+    const newValue = videoGoal + 1;
+    onVideoGoalChange(newValue);
+    setInputValue(newValue.toString());
   };
 
   const handleDecrement = () => {
-    onVideoGoalChange(videoGoal - 1);
+    const newValue = videoGoal - 1;
+    onVideoGoalChange(newValue);
+    setInputValue(newValue.toString());
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value) || 1;
-    onVideoGoalChange(value);
+    setInputValue(e.target.value);
   };
+
+  const handleApplyValue = () => {
+    const value = parseInt(inputValue) || 1;
+    const clampedValue = Math.max(1, Math.min(50, value));
+    onVideoGoalChange(clampedValue);
+    setInputValue(clampedValue.toString());
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleApplyValue();
+    }
+  };
+
+  // Sync local state when prop changes externally
+  React.useEffect(() => {
+    setInputValue(videoGoal.toString());
+  }, [videoGoal]);
 
   return (
     <div className="space-y-2">
@@ -50,11 +73,11 @@ export const VideoGoalControls: React.FC<VideoGoalControlsProps> = ({
           </span>
         )}
       </div>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         <Button
           variant="outline"
-          size="sm"
-          className="h-8 w-8 p-0"
+          size="icon"
+          className="h-8 w-8"
           onClick={handleDecrement}
           disabled={disabled || videoGoal <= 1}
         >
@@ -64,15 +87,16 @@ export const VideoGoalControls: React.FC<VideoGoalControlsProps> = ({
           type="number"
           min="1"
           max="50"
-          value={videoGoal}
+          value={inputValue}
           onChange={handleInputChange}
-          className="h-8 text-center flex-1"
+          onKeyPress={handleKeyPress}
+          className="h-8 text-center"
           disabled={disabled}
         />
         <Button
           variant="outline"
-          size="sm"
-          className="h-8 w-8 p-0"
+          size="icon"
+          className="h-8 w-8"
           onClick={handleIncrement}
           disabled={disabled || videoGoal >= 50}
         >

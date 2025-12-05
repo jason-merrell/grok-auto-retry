@@ -31,20 +31,21 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
           </TooltipTrigger>
           <TooltipContent>{isMaximized ? 'Restore' : 'Maximize'}</TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-7 w-7"
-              onClick={onMinimize}
-              disabled={isMaximized}
-            >
-              <Minimize2 className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Minimize</TooltipContent>
-        </Tooltip>
+        {!isMaximized && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7"
+                onClick={onMinimize}
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Minimize</TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </div>
   );

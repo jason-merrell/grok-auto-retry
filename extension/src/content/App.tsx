@@ -24,11 +24,18 @@ const App: React.FC = () => {
   const panelResize = usePanelResize();
   const miniDrag = useMiniToggleDrag();
   const [rapidFailureDetected, setRapidFailureDetected] = React.useState(false);
+  const nextVideoTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Handle moderation detection
   const handleModerationDetected = React.useCallback(() => {
+    // Don't retry if session is not active
+    if (!retry.isSessionActive) {
+      console.log('[Grok Retry] Ignoring moderation - session not active');
+      return;
+    }
+
     // Check for rapid failure (≤6 seconds) - indicates pre-flight moderation filter
-    if (retry.isSessionActive && retry.lastAttemptTime > 0) {
+    if (retry.lastAttemptTime > 0) {
       const timeSinceAttempt = Date.now() - retry.lastAttemptTime;
       if (timeSinceAttempt <= 6000) {
         console.warn('[Grok Retry] Rapid failure detected (<6s) - likely pre-flight moderation filter on prompt text');
@@ -88,10 +95,21 @@ const App: React.FC = () => {
       // Continue generating - restart the cycle
       console.log(`[Grok Retry] Progress: ${newCount}/${retry.videoGoal} videos generated, continuing...`);
       
+      // Clear any existing timeout
+      if (nextVideoTimeoutRef.current) {
+        clearTimeout(nextVideoTimeoutRef.current);
+      }
+      
       // Wait 8 seconds before next generation
-      setTimeout(() => {
+      nextVideoTimeoutRef.current = setTimeout(() => {
+        // Check if session is still active before proceeding
+        if (!retry.isSessionActive) {
+          console.log('[Grok Retry] Skipping next video - session cancelled');
+          return;
+        }
         retry.resetRetries(); // Reset retry count for next video
         retry.clickMakeVideoButton(retry.lastPromptValue);
+        nextVideoTimeoutRef.current = null;
       }, 8000);
     }
   }, [retry]);
@@ -115,6 +133,15 @@ const App: React.FC = () => {
       retry.updatePromptValue(value);
     });
   }, [setupClickListener, retry]);
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (nextVideoTimeoutRef.current) {
+        clearTimeout(nextVideoTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCopyFromSite = () => {
     const value = capturePromptFromSite();
@@ -162,6 +189,12 @@ const App: React.FC = () => {
   };
 
   const handleCancelSession = () => {
+    // Clear any pending next video timeout
+    if (nextVideoTimeoutRef.current) {
+      clearTimeout(nextVideoTimeoutRef.current);
+      nextVideoTimeoutRef.current = null;
+      console.log('[Grok Retry] Cleared pending next video timeout');
+    }
     retry.endSession();
   };
 
