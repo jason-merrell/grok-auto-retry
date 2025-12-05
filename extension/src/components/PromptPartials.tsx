@@ -34,7 +34,7 @@ export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial,
 						size="sm"
 						role="combobox"
 						aria-expanded={open}
-						className="text-xs grow shrink-0 basis-0 min-w-0"
+						className="text-xs grow shrink-0 basis-0 min-w-0 h-8"
 						disabled={disabled}
 					>
 						<Plus className="h-3 w-3" />
@@ -43,7 +43,13 @@ export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial,
 				</PopoverTrigger>
 				<Tooltip>
 					<TooltipTrigger asChild>
-						<Button variant="ghost" size="sm" onClick={() => setDialogOpen(true)} disabled={disabled}>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-8 w-8"
+							onClick={() => setDialogOpen(true)}
+							disabled={disabled}
+						>
 							<SettingsIcon className="h-3 w-3" />
 						</Button>
 					</TooltipTrigger>
@@ -85,8 +91,7 @@ export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial,
 									<TooltipTrigger asChild>
 										<Button
 											variant="default"
-											size="sm"
-											className="h-7 px-2 gap-1 text-xs w-full justify-between"
+											className="h-8 px-2 gap-1 text-xs w-full justify-between"
 											onClick={() => {
 												onAppendPartial(partial.content, partial.position);
 												setOpen(false);

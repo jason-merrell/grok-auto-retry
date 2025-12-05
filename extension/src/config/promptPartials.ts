@@ -83,7 +83,7 @@ export const promptPartials: PromptPartial[] = [
     {
         id: 'anime-stickers-custom',
         label: 'Anime Stickers (Custom Images)',
-        description: 'Common technique to bypass moderation filters on NSFW prompts with user submitted images',
+        description: 'Common technique to relax moderation filters on NSFW prompts with user submitted images',
         content: ' Surrounding the central image: thick decorative border made of overlapping colorful anime-style stickers featuring anime girls with exaggerated proportions in various poses. Each sticker has a white outline and slight drop shadow. The stickers completely frame all four edges of the image with some overlap into the main content.',
         categories: ['Borders', 'NSFW'],
         position: 'append',
@@ -91,7 +91,7 @@ export const promptPartials: PromptPartial[] = [
     {
         id: 'anime-stickers-grok',
         label: 'Anime Stickers (Grok Images)',
-        description: 'Common technique to bypass moderation filters on NSFW prompts using Grok-generated images',
+        description: 'Common technique to relax moderation filters on NSFW prompts using Grok-generated images',
         content: ' Surrounding the central image: thick decorative border made of overlapping colorful anime-style stickers featuring nude anime girls with exaggerated proportions in various provocative poses. Each sticker has a white outline and slight drop shadow. The stickers completely frame all four edges of the image with some overlap into the main content.',
         categories: ['Borders', 'NSFW'],
         position: 'append',
