@@ -5,11 +5,12 @@ A TypeScript-based Tampermonkey userscript that automatically retries video gene
 ## Features
 
 - ✅ Auto-retry on content moderation with configurable max retries
-- 📝 Prompt preservation and manual sync
-- ⏸️ Pause/Resume functionality
+- 🎬 Video goal system - automatically generate multiple videos with 8-second delays
+- 📝 Prompt preservation and quick-add prompt partials with categories
 - 🔄 Real-time progress in browser tab title
-- 🎨 Resizable, draggable UI panel
-- 📦 Built with TypeScript for type safety
+- 🎨 Resizable, draggable UI panel with fullscreen maximize mode
+- 📊 Dynamic progress badges with color-coded status
+- 📦 Built with TypeScript and React for type safety and modern UI
 
 ## Development
 
@@ -34,92 +35,128 @@ npm run watch
 
 ### Project Structure
 
-```
+```text
 grok-retry-script/
-├── src/
-│   └── index.ts          # Main TypeScript source
-├── dist/
-│   └── index.js          # Compiled userscript (ready for Tampermonkey)
-├── build.js              # Build script that adds userscript header
-├── tsconfig.json         # TypeScript configuration
-└── package.json          # Project metadata and scripts
+├── extension/
+│   ├── src/
+│   │   ├── components/      # React UI components
+│   │   ├── hooks/           # Custom React hooks
+│   │   ├── config/          # Configuration (prompt partials, etc.)
+│   │   ├── lib/             # Utility functions
+│   │   └── content/         # Content script entry point
+│   ├── dist/                # Built extension
+│   ├── public/              # Static assets and manifest
+│   └── vite.config.ts       # Vite build configuration
+└── package.json             # Project metadata and scripts
 ```
 
 ### Build Process
 
-1. **TypeScript Compilation**: `tsc` compiles `src/index.ts` to `dist/index.js`
-2. **Header Injection**: `build.js` prepends the Tampermonkey metadata header
-3. **Output**: `dist/index.js` is ready to install in Tampermonkey
+1. **Vite Build**: Compiles TypeScript and React components
+2. **Content Script**: Bundles into `dist/content.js` for Chrome extension
+3. **Assets**: Copies manifest and static files to `dist/`
+4. **Output**: `dist/` folder ready to load as unpacked extension
 
 ### Installation
 
-1. Build the project: `npm run build`
-2. Open Tampermonkey dashboard
-3. Create a new script or import `dist/index.js`
-4. Navigate to https://grok.com/* to see the control panel
+1. Build the project: `cd extension && npm run build`
+2. Open Chrome Extensions: `chrome://extensions/`
+3. Enable "Developer mode" (top-right toggle)
+4. Click "Load unpacked" and select the `extension/dist` folder
+5. Navigate to <https://grok.com/imagine/post/*> to see the control panel
 
 ## Usage
 
-1. Enable auto-retry using the checkbox
-2. Click "Copy from site" to capture the current prompt or type your own
-3. Set max retries (1-50)
-4. The script will automatically retry when moderation occurs
-5. Monitor progress in the browser tab title
+1. Enable auto-retry using the toggle switch
+2. Set max retries (1-50) and video goal (1-50)
+3. Click "Copy from site" to capture the current prompt or type your own
+4. Use prompt partials to quickly add common modifiers (Style, Lighting, Mood, etc.)
+5. Click "Generate Video" to start - the system will automatically retry on moderation
+6. Monitor progress in the browser tab title and dynamic status badges
 
 ### Controls
 
-- **Pause/Resume**: Temporarily stop auto-retry
-- **Minimize**: Collapse panel to a draggable "+" button
+- **Minimize**: Collapse panel to a draggable button (bottom-right)
+- **Maximize**: Expand panel to fullscreen
 - **Reset count**: Reset retry counter to 0
-- **+/-**: Adjust max retries
+- **+/-**: Adjust max retries and video goal
+- **Prompt Partials**: Quick-add categorized prompt modifiers with descriptions
 
-## TypeScript Development
+## Development
 
 ### Type Safety
 
 The codebase uses TypeScript with strict mode enabled:
 
-- All variables are explicitly typed
-- Null safety checks on DOM elements
-- Type-safe event handlers
-- HTMLElement type assertions for DOM queries
+- All components are typed with React.FC
+- Custom hooks with explicit return types
+- Type-safe prop interfaces
+- Shadcn UI components for consistent UX
 
 ### Making Changes
 
-1. Edit `src/index.ts`
+1. Edit files in `extension/src/`
 2. Run `npm run watch` for automatic rebuilds
-3. Refresh the page in your browser to reload the script
-4. Check browser console for `[Grok-Moderation-Retry]` logs
+3. Reload the extension in Chrome (`chrome://extensions/`)
+4. Refresh the page to see changes
+5. Check browser console for `[Grok Retry]` logs
 
 ### Adding New Features
 
 ```typescript
-// Example: Add a new button to the UI panel
-const myButton = document.createElement("button");
-myButton.textContent = "My Feature";
-myButton.addEventListener("click", () => {
-  log("Button clicked!");
-});
-contentWrapper?.appendChild(myButton);
+// Example: Add a new React component
+import React from 'react';
+import { Button } from '@/components/ui/button';
+
+interface MyFeatureProps {
+  onAction: () => void;
+}
+
+export const MyFeature: React.FC<MyFeatureProps> = ({ onAction }) => {
+  return (
+    <Button onClick={onAction}>
+      My Feature
+    </Button>
+  );
+};
 ```
 
 ## Configuration
 
-Edit constants in `src/index.ts`:
+### Prompt Partials
+
+Add custom prompt snippets in `extension/src/config/promptPartials.ts`:
 
 ```typescript
-const MODERATION_TEXT = "Content Moderated. Try a different idea.";
-const BUTTON_SELECTOR = 'button[aria-label="Make video"]';
-const TEXTAREA_SELECTOR = 'textarea[aria-label="Make a video"]';
-const CLICK_COOLDOWN = 8000; // ms between retries
-const DEFAULT_MAX_RETRIES = 3;
+export const promptPartials: PromptPartial[] = [
+  {
+    id: 'my-partial',
+    label: 'My Style',
+    description: 'Adds my custom style modifiers',
+    content: 'your custom prompt text. ',
+    categories: ['Style'],
+    position: 'append'
+  }
+];
 ```
+
+### Constants
+
+Edit detection and timing in `extension/src/hooks/`:
+
+- `useModerationDetector.ts` - Moderation text patterns
+- `useSuccessDetector.ts` - Success detection logic
+- `App.tsx` - 8-second delay between video generations
 
 ## Scripts
 
-- `npm run build` - Compile TypeScript and add userscript header
-- `npm run watch` - Watch mode for development (auto-rebuild on changes)
-- `npm run dev` - Same as watch
+```bash
+cd extension
+npm install           # Install dependencies
+npm run build         # Production build
+npm run watch         # Watch mode for development
+npm run dev           # Development server (Vite HMR)
+```
 
 ## License
 

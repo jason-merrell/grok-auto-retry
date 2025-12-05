@@ -6,14 +6,18 @@ export interface PostData {
   lastPromptValue: string;
   retryCount: number;
   isSessionActive: boolean;
+  videoGoal: number;
+  videosGenerated: number;
 }
 
 const DEFAULT_POST_DATA: PostData = {
   maxRetries: 3,
-  autoRetryEnabled: false,
+  autoRetryEnabled: true,
   lastPromptValue: '',
   retryCount: 0,
   isSessionActive: false,
+  videoGoal: 1,
+  videosGenerated: 0,
 };
 
 const STORAGE_PREFIX = 'grokRetryPost_';

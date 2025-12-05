@@ -26,6 +26,8 @@ export const useGrokRetry = (postId: string | null) => {
   const retryCount = postData.retryCount;
   const lastPromptValue = postData.lastPromptValue;
   const isSessionActive = postData.isSessionActive;
+  const videoGoal = postData.videoGoal;
+  const videosGenerated = postData.videosGenerated;
 
   const setMaxRetries = useCallback((value: number) => {
     const clamped = Math.max(1, Math.min(50, value));
@@ -44,14 +46,29 @@ export const useGrokRetry = (postId: string | null) => {
     save('retryCount', 0);
   }, [save]);
 
+  const setVideoGoal = useCallback((value: number) => {
+    const clamped = Math.max(1, Math.min(50, value));
+    save('videoGoal', clamped);
+  }, [save]);
+
+  const incrementVideosGenerated = useCallback(() => {
+    save('videosGenerated', videosGenerated + 1);
+  }, [save, videosGenerated]);
+
+  const resetVideosGenerated = useCallback(() => {
+    save('videosGenerated', 0);
+  }, [save]);
+
   const startSession = useCallback(() => {
     save('isSessionActive', true);
     save('retryCount', 0);
+    save('videosGenerated', 0);
   }, [save]);
 
   const endSession = useCallback(() => {
     save('isSessionActive', false);
     save('retryCount', 0);
+    save('videosGenerated', 0);
   }, [save]);
 
   // Click the "Make video" button with React-style value setting
@@ -126,6 +143,8 @@ export const useGrokRetry = (postId: string | null) => {
     lastPromptValue,
     originalPageTitle,
     isSessionActive,
+    videoGoal,
+    videosGenerated,
     
     // Actions
     setMaxRetries,
@@ -135,5 +154,8 @@ export const useGrokRetry = (postId: string | null) => {
     clickMakeVideoButton,
     startSession,
     endSession,
+    setVideoGoal,
+    incrementVideosGenerated,
+    resetVideosGenerated,
   };
 };

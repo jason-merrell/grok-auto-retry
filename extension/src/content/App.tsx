@@ -66,7 +66,24 @@ const App: React.FC = () => {
   // Handle successful video generation
   const handleSuccess = React.useCallback(() => {
     console.log('[Grok Retry] Video generated successfully!');
-    retry.endSession();
+    retry.incrementVideosGenerated();
+    
+    const newCount = retry.videosGenerated + 1;
+    
+    // Check if we've reached the video goal
+    if (newCount >= retry.videoGoal) {
+      console.log(`[Grok Retry] Video goal reached! Generated ${newCount}/${retry.videoGoal} videos`);
+      retry.endSession();
+    } else {
+      // Continue generating - restart the cycle
+      console.log(`[Grok Retry] Progress: ${newCount}/${retry.videoGoal} videos generated, continuing...`);
+      
+      // Wait 8 seconds before next generation
+      setTimeout(() => {
+        retry.resetRetries(); // Reset retry count for next video
+        retry.clickMakeVideoButton(retry.lastPromptValue);
+      }, 8000);
+    }
   }, [retry]);
 
   useSuccessDetector(handleSuccess, retry.isSessionActive);
@@ -77,7 +94,9 @@ const App: React.FC = () => {
     retry.retryCount,
     retry.maxRetries,
     retry.autoRetryEnabled,
-    rateLimitDetected
+    rateLimitDetected,
+    retry.videoGoal,
+    retry.videosGenerated
   );
 
   // Set up click listener for prompt capture
@@ -141,6 +160,10 @@ const App: React.FC = () => {
     }
   };
 
+  const handleMaximizeToggle = () => {
+    saveUIPref('isMaximized', !uiPrefs.isMaximized);
+  };
+
   // Don't render if not on imagine/post route
   if (!isImaginePostRoute) {
     return null;
@@ -169,15 +192,20 @@ const App: React.FC = () => {
           width={panelResize.width}
           height={panelResize.height}
           fontSize={panelResize.fontSize}
+          isMaximized={uiPrefs.isMaximized}
           autoRetryEnabled={retry.autoRetryEnabled}
           retryCount={retry.retryCount}
           maxRetries={retry.maxRetries}
+          videoGoal={retry.videoGoal}
+          videosGenerated={retry.videosGenerated}
           promptValue={retry.lastPromptValue}
           isSessionActive={retry.isSessionActive}
           onResizeStart={panelResize.handleResizeStart}
           onMinimize={() => saveUIPref('isMinimized', true)}
+          onMaximizeToggle={handleMaximizeToggle}
           onAutoRetryChange={retry.setAutoRetryEnabled}
           onMaxRetriesChange={retry.setMaxRetries}
+          onVideoGoalChange={retry.setVideoGoal}
           onResetRetries={retry.resetRetries}
           onPromptChange={retry.updatePromptValue}
           onPromptAppend={handlePromptAppend}

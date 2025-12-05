@@ -4,7 +4,7 @@ import { useStorage } from './useStorage';
 const MIN_WIDTH = 260;
 const MAX_WIDTH = 520;
 const MIN_HEIGHT = 200;
-const MAX_HEIGHT = 600;
+const MAX_HEIGHT = 800;
 const BASE_WIDTH = 320;
 const MIN_FONT = 11;
 const MAX_FONT = 16;

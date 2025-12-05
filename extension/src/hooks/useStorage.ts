@@ -6,12 +6,14 @@ export interface StorageData {
   panelHeight: number;
   miniTogglePosition?: { x: number; y: number };
   isMinimized: boolean;
+  isMaximized: boolean;
 }
 
 const DEFAULT_STORAGE: StorageData = {
   panelWidth: 320,
   panelHeight: 400,
   isMinimized: false,
+  isMaximized: false,
 };
 
 export const useStorage = () => {

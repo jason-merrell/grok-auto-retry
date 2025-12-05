@@ -10,6 +10,7 @@ interface PromptTextareaProps {
   onChange: (value: string) => void;
   onCopyFromSite: () => void;
   onCopyToSite: () => void;
+  disabled?: boolean;
 }
 
 export const PromptTextarea: React.FC<PromptTextareaProps> = ({
@@ -17,11 +18,19 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
   onChange,
   onCopyFromSite,
   onCopyToSite,
+  disabled = false,
 }) => {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label className="text-sm">Prompt</Label>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Label className="text-sm cursor-help">Prompt</Label>
+          </TooltipTrigger>
+          <TooltipContent>
+            The prompt used for video generation. Import from site or type your own.
+          </TooltipContent>
+        </Tooltip>
         <div className="flex items-center text-xs text-muted-foreground">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -30,6 +39,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
                 size="sm" 
                 className="h-7 px-2 gap-1"
                 onClick={onCopyFromSite}
+                disabled={disabled}
               >
                 <ArrowDown className="h-3.5 w-3.5" />
                 <span className="font-medium sr-only">Import</span>
@@ -45,7 +55,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
                 size="sm" 
                 className="h-7 px-2 gap-1"
                 onClick={onCopyToSite}
-                disabled={!value}
+                disabled={disabled || !value}
               >
                 <ArrowUp className="h-3.5 w-3.5" />
                 <span className="font-medium sr-only">Export</span>
@@ -60,6 +70,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
         className="min-h-[160px] text-xs resize-y"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
       />
     </div>
   );

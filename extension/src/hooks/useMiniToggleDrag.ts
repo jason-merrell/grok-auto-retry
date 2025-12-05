@@ -6,7 +6,7 @@ const DRAG_THRESHOLD = 5; // pixels to distinguish click from drag
 export const useMiniToggleDrag = () => {
   const { data: storage, save } = useStorage();
   const [position, setPosition] = useState(
-    storage.miniTogglePosition || { x: 20, y: window.innerHeight - 80 }
+    storage.miniTogglePosition || { x: window.innerWidth - 80, y: window.innerHeight - 80 }
   );
   const [isDragging, setIsDragging] = useState(false);
   const [dragMoved, setDragMoved] = useState(false);

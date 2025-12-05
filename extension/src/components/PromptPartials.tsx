@@ -7,9 +7,10 @@ import { Plus } from 'lucide-react';
 
 interface PromptPartialsProps {
   onAppendPartial: (content: string, position: 'prepend' | 'append') => void;
+  disabled?: boolean;
 }
 
-export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial }) => {
+export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial, disabled = false }) => {
   const [open, setOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
@@ -28,6 +29,7 @@ export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial 
           role="combobox"
           aria-expanded={open}
           className="h-7 w-full justify-start px-2 text-xs gap-1"
+          disabled={disabled}
         >
           <Plus className="h-3 w-3" />
           Add Prompt Partial
