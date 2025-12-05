@@ -42,6 +42,7 @@
 
 ### UI Controls
 - **Enable/Disable**: Toggle auto-retry on/off
+- **Session Indicator**: Green "ACTIVE" badge appears next to title when session is running
 - **Minimize**: Collapse to draggable floating button (bottom-right corner)
 - **Maximize**: Expand panel to fullscreen mode
 - **Resize**: Drag top-left corner to resize panel (260-520px width, 100-800px height)
@@ -70,6 +71,7 @@
 
 ### Visual Indicators
 
+- **Session Active Badge**: Green pulsing "ACTIVE" badge next to panel title during sessions
 - **Dynamic Retry Badge**: Shows current retry count with color-coded progress
   - Green background when 0-49% of max retries used
   - Orange background when 50-79% used
@@ -78,7 +80,12 @@
   - Gray (secondary) when no videos generated
   - Orange when in progress (1 to goal-1)
   - Green when goal reached
+- **Rapid Failure Warning**: Alert icon appears when moderation occurs within 6 seconds
+  - Indicates pre-flight moderation filter triggered by prompt text
+  - Automatically clears when you edit the prompt
+  - Suggests rephrasing prompt or removing sensitive keywords
 - **Page Title Status**:
+  - ✅ X/Y Complete = Video goal reached successfully
   - 🎬 X/Y = Video progress (when goal > 1)
   - 🔄 = Active retrying
   - ❌ = Max retries reached
@@ -110,6 +117,7 @@ Storage Details:
 - Opening the same post in multiple tabs shares both persistent and session state
 - Different posts maintain completely independent state
 - Reopening a closed tab restores your preferences and prompt, but starts fresh session counters
+- **Interrupted Session Handling**: If you refresh the page during an active session, it will automatically cancel the interrupted session to prevent stuck states. You can click "Generate Video" to start a new session.
 
 **Global UI Preferences (Chrome Storage):**
 
@@ -149,6 +157,14 @@ npm run dev
 - Verify retry counter shows in the badge
 - Make sure you've captured the prompt using "Copy from Site" button
 - Check browser console for "[Grok Retry]" logs
+
+### Rapid failure warning appearing
+
+- Warning appears when moderation occurs within 6 seconds of generation attempt
+- Indicates Grok's pre-flight filter is blocking the prompt before video generation starts
+- Try rephrasing your prompt or removing sensitive keywords
+- Warning automatically clears when you edit the prompt
+- Rapid failures are unlikely to succeed with continued retries
 
 ### Video goal not working
 

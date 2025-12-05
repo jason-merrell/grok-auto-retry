@@ -7,9 +7,12 @@ A TypeScript-based Chrome extension that automatically retries video generation 
 - ✅ Auto-retry on content moderation with configurable max retries
 - 🎬 Video goal system - automatically generate multiple videos with 8-second delays
 - 📝 Prompt preservation and quick-add prompt partials with categories
-- 🔄 Real-time progress in browser tab title
+- 🔄 Real-time progress in browser tab title with completion status
 - 🎨 Resizable, draggable UI panel with fullscreen maximize mode
 - 📊 Dynamic progress badges with color-coded status
+- ⚠️ Rapid failure detection warns of pre-flight moderation issues
+- 💚 Visual session indicator with pulsing active badge
+- 🔒 Hybrid storage - persistent preferences, session-aware state
 - 📦 Built with TypeScript and React for type safety and modern UI
 
 ## Development
