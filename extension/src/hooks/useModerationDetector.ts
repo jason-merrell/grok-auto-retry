@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
-import { selectors, queryIn } from '../config/selectors';
+import { selectors } from '../config/selectors';
 
 const MODERATION_TEXT = "Content Moderated. Try a different idea.";
 const RATE_LIMIT_TEXT = "Rate limit reached";

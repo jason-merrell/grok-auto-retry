@@ -129,7 +129,7 @@ const App: React.FC = () => {
 					console.log("[Grok Retry] Skipping next video - session cancelled");
 					return;
 				}
-				retry.resetRetries(); // Reset retry count for next video
+				// Do not reset retryCount; maxRetries applies to whole session
 				// Use overridePermit since this is a new video generation, not a retry
 				retry.clickMakeVideoButton(retry.lastPromptValue, { overridePermit: true });
 				nextVideoTimeoutRef.current = null;

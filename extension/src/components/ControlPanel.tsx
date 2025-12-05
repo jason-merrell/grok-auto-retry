@@ -112,7 +112,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 							width: `${width}px`,
 							height: `${height}px`,
 					  }),
-				fontSize: `${fontSize}px`,
+				fontSize: `${isMaximized ? Math.max(fontSize * 1.2, 14) : fontSize}px`,
 			}}
 		>
 			{!isMaximized && <ResizeHandle onResizeStart={onResizeStart} />}
@@ -125,8 +125,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 					onMaximizeToggle={onMaximizeToggle}
 					onToggleDebug={() => setShowDebug(!showDebug)}
 					isDebug={showDebug}
-					retryCount={retryCount}
-					videosGenerated={videosGenerated}
 				/>
 			</CardHeader>
 
@@ -262,6 +260,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 							onCopyFromSite={onCopyFromSite}
 							onCopyToSite={onCopyToSite}
 							disabled={!autoRetryEnabled}
+							isMaximized={isMaximized}
 						/>
 
 						<PromptPartials onAppendPartial={onPromptAppend} disabled={!autoRetryEnabled} />

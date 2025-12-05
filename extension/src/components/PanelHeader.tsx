@@ -11,8 +11,6 @@ interface PanelHeaderProps {
 	onMaximizeToggle: () => void;
 	onToggleDebug?: () => void;
 	isDebug?: boolean;
-	retryCount?: number;
-	videosGenerated?: number;
 }
 
 export const PanelHeader: React.FC<PanelHeaderProps> = ({
@@ -22,8 +20,6 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 	onMaximizeToggle,
 	onToggleDebug,
 	isDebug,
-	retryCount,
-	videosGenerated,
 }) => {
 	return (
 		<div className="flex items-center justify-between">
