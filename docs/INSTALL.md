@@ -43,6 +43,7 @@
 ### UI Controls
 - **Enable/Disable**: Toggle auto-retry on/off
 - **Session Indicator**: Green "ACTIVE" badge appears next to title when session is running
+- **Debug Panel**: Toggle between normal controls and real-time session logs with severity colors
 - **Minimize**: Collapse to draggable floating button (bottom-right corner)
 - **Maximize**: Expand panel to fullscreen mode
 - **Resize**: Drag top-left corner to resize panel (260-520px width, 100-800px height)
@@ -51,6 +52,7 @@
 - **Prompt Partials**: Quick-add button to insert categorized prompt modifiers
 
 ### Prompt Partials
+
 - Pre-configured prompt snippets organized by category:
   - **Style**: Cinematic, Photorealistic, Illustrated, Neon
   - **Lighting**: Golden Hour, Dramatic, Soft, High Contrast, Neon
@@ -64,6 +66,7 @@
 - Appends to existing prompt without duplicates
 
 ### Prompt Management
+
 - Use "Copy from Site" button to capture prompt before starting retries
 - Edit prompt directly in extension panel
 - Prompt is automatically restored to site's textarea before each retry
@@ -91,6 +94,20 @@
   - ❌ = Max retries reached
   - ⏳ = Rate limited (waiting 60s)
 
+### Debug Logging
+
+- **Automatic Panel Switching**: Debug panel automatically activates when sessions start, returns to normal view when sessions end
+- **Real-time Session Logs**: Live updates of all session activity with timestamps
+- **Color-coded Severity Levels**:
+  - **INFO** (gray): General information (button clicks, prompt restoration)
+  - **WARN** (yellow): Warnings (moderation detection, rapid failures)
+  - **ERROR** (red): Errors and failures
+  - **SUCCESS** (green): Successful video generation and completions
+- **Fullscreen Debug Mode**: In fullscreen + debug view, shows color-coded retry/video badges beside session logs
+- **Copy Logs**: Export all session logs to clipboard for analysis
+- **Manual Toggle**: Debug button (bug icon) allows manual switching between views
+- **Smart Deduplication**: Prevents duplicate moderation logs from DOM re-renders
+
 ### Settings Persistence
 
 **Per-Post State (Hybrid Storage):**
@@ -108,6 +125,7 @@ Session Data (resets when tab closes):
 - Videos generated count
 - Active session status
 - Last attempt timestamp
+- Session logs with real-time updates
 
 Storage Details:
 
@@ -194,6 +212,15 @@ npm run dev
 - Panel will expand to fullscreen (100vw × 100vh)
 - Click restore button (same position) to return to normal size
 - Maximize state persists across page loads
+
+### Debug logs not showing
+
+- Debug panel automatically activates when sessions start
+- Click the bug icon in panel header to manually toggle debug view
+- Logs appear in real-time during active sessions
+- Session logs are cleared when new sessions start for the same post
+- Check that you're on the correct post (logs are isolated per post ID)
+- In fullscreen debug mode, retry/video progress badges appear beside "Session Logs" header
 
 ## Uninstall
 
