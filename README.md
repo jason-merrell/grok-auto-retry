@@ -1,6 +1,6 @@
-# Grok Auto Retry Userscript
+# Grok Auto Retry Extension
 
-A TypeScript-based Tampermonkey userscript that automatically retries video generation on Grok.com when content moderation occurs.
+A TypeScript-based Chrome extension that automatically retries video generation on Grok.com when content moderation occurs.
 
 ## Features
 
@@ -18,7 +18,7 @@ A TypeScript-based Tampermonkey userscript that automatically retries video gene
 
 - Node.js (v18+)
 - npm
-- Tampermonkey browser extension
+- Chrome browser
 
 ### Setup
 
