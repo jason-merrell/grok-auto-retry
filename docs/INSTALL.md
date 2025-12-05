@@ -86,17 +86,30 @@
 
 ### Settings Persistence
 
-**Per-Post State (Session Storage):**
+**Per-Post State (Hybrid Storage):**
+
+Persistent Data (survives tab closure):
 
 - Max retries setting
 - Video goal setting
 - Auto-retry enabled/disabled state
 - Current prompt value
+
+Session Data (resets when tab closes):
+
 - Retry count
 - Videos generated count
+- Active session status
+- Last attempt timestamp
+
+Storage Details:
+
 - State is isolated by post ID from URL (e.g., `/imagine/post/7f831f9c-...`)
-- Opening the same post in multiple tabs shares state
+- Persistent preferences are saved to Chrome storage
+- Session state uses browser sessionStorage (cleared on tab close)
+- Opening the same post in multiple tabs shares both persistent and session state
 - Different posts maintain completely independent state
+- Reopening a closed tab restores your preferences and prompt, but starts fresh session counters
 
 **Global UI Preferences (Chrome Storage):**
 

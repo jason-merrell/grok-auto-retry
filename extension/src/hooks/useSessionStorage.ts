@@ -1,95 +1,164 @@
 import { useState, useCallback, useEffect } from 'react';
 
-export interface PostData {
-  maxRetries: number;
-  autoRetryEnabled: boolean;
-  lastPromptValue: string;
-  retryCount: number;
-  isSessionActive: boolean;
-  videoGoal: number;
-  videosGenerated: number;
-  lastAttemptTime: number;
+// Persistent preferences (chrome.storage.local)
+interface PersistentData {
+    maxRetries: number;
+    autoRetryEnabled: boolean;
+    lastPromptValue: string;
+    videoGoal: number;
 }
 
-const DEFAULT_POST_DATA: PostData = {
-  maxRetries: 3,
-  autoRetryEnabled: true,
-  lastPromptValue: '',
-  retryCount: 0,
-  isSessionActive: false,
-  videoGoal: 1,
-  videosGenerated: 0,
-  lastAttemptTime: 0,
+// Session-specific state (sessionStorage)
+interface SessionData {
+    retryCount: number;
+    isSessionActive: boolean;
+    videosGenerated: number;
+    lastAttemptTime: number;
+}
+
+// Combined interface for external API
+export interface PostData extends PersistentData, SessionData { }
+
+const DEFAULT_PERSISTENT_DATA: PersistentData = {
+    maxRetries: 3,
+    autoRetryEnabled: true,
+    lastPromptValue: '',
+    videoGoal: 1,
 };
 
-const STORAGE_PREFIX = 'grokRetryPost_';
+const DEFAULT_SESSION_DATA: SessionData = {
+    retryCount: 0,
+    isSessionActive: false,
+    videosGenerated: 0,
+    lastAttemptTime: 0,
+};
+
+const DEFAULT_POST_DATA: PostData = {
+    ...DEFAULT_PERSISTENT_DATA,
+    ...DEFAULT_SESSION_DATA,
+};
+
+const PERSISTENT_STORAGE_PREFIX = 'grokRetryPost_';
+const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
 
 export const usePostStorage = (postId: string | null) => {
-  const [data, setData] = useState<PostData>(DEFAULT_POST_DATA);
-  const [isLoading, setIsLoading] = useState(true);
+    const [data, setData] = useState<PostData>(DEFAULT_POST_DATA);
+    const [isLoading, setIsLoading] = useState(true);
 
-  // Load from sessionStorage when postId changes
-  useEffect(() => {
-    if (!postId) {
-      setData(DEFAULT_POST_DATA);
-      setIsLoading(false);
-      return;
-    }
+    // Load from both chrome.storage.local (persistent) and sessionStorage (session) when postId changes
+    useEffect(() => {
+        if (!postId) {
+            setData(DEFAULT_POST_DATA);
+            setIsLoading(false);
+            return;
+        }
 
-    const storageKey = `${STORAGE_PREFIX}${postId}`;
-    try {
-      const stored = sessionStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setData({ ...DEFAULT_POST_DATA, ...parsed });
-        console.log('[Grok Retry] Loaded state for post:', postId);
-      } else {
+        const persistentKey = `${PERSISTENT_STORAGE_PREFIX}${postId}`;
+        const sessionKey = `${SESSION_STORAGE_PREFIX}${postId}`;
+
+        // Load persistent data from chrome.storage.local
+        chrome.storage.local.get([persistentKey], (result) => {
+            const persistentData = result[persistentKey] || DEFAULT_PERSISTENT_DATA;
+
+            // Load session data from sessionStorage
+            let sessionData = DEFAULT_SESSION_DATA;
+            try {
+                const stored = sessionStorage.getItem(sessionKey);
+                if (stored) {
+                    sessionData = { ...DEFAULT_SESSION_DATA, ...JSON.parse(stored) };
+                }
+            } catch (error) {
+                console.error('[Grok Retry] Failed to load session storage:', error);
+            }
+
+            setData({ ...persistentData, ...sessionData });
+            console.log('[Grok Retry] Loaded state for post:', postId, { persistentData, sessionData });
+            setIsLoading(false);
+        });
+    }, [postId]);
+
+    // Save to appropriate storage based on key type
+    const saveToPost = useCallback((updates: Partial<PostData>) => {
+        if (!postId) return;
+
+        // Split updates into persistent and session data
+        const persistentKeys: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal'];
+        const sessionKeys: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime'];
+
+        const persistentUpdates: Partial<PersistentData> = {};
+        const sessionUpdates: Partial<SessionData> = {};
+
+        Object.keys(updates).forEach(key => {
+            if (persistentKeys.includes(key as keyof PersistentData)) {
+                (persistentUpdates as any)[key] = updates[key as keyof PostData];
+            }
+            if (sessionKeys.includes(key as keyof SessionData)) {
+                (sessionUpdates as any)[key] = updates[key as keyof PostData];
+            }
+        });
+
+        // Update React state immediately
+        setData((prev) => ({ ...prev, ...updates }));
+
+        // Save persistent data to chrome.storage.local
+        if (Object.keys(persistentUpdates).length > 0) {
+            const persistentKey = `${PERSISTENT_STORAGE_PREFIX}${postId}`;
+            chrome.storage.local.get([persistentKey], (result) => {
+                const existing = result[persistentKey] || {};
+                chrome.storage.local.set({ [persistentKey]: { ...existing, ...persistentUpdates } }, () => {
+                    if (chrome.runtime.lastError) {
+                        console.error('[Grok Retry] Failed to save persistent storage:', chrome.runtime.lastError);
+                    }
+                });
+            });
+        }
+
+        // Save session data to sessionStorage
+        if (Object.keys(sessionUpdates).length > 0) {
+            const sessionKey = `${SESSION_STORAGE_PREFIX}${postId}`;
+            try {
+                const stored = sessionStorage.getItem(sessionKey);
+                const existing = stored ? JSON.parse(stored) : {};
+                sessionStorage.setItem(sessionKey, JSON.stringify({ ...existing, ...sessionUpdates }));
+            } catch (error) {
+                console.error('[Grok Retry] Failed to save session storage:', error);
+            }
+        }
+    }, [postId]);
+
+    // Save a specific key
+    const save = useCallback(<K extends keyof PostData>(
+        key: K,
+        value: PostData[K]
+    ) => {
+        saveToPost({ [key]: value });
+    }, [saveToPost]);
+
+    // Clear post data (both persistent and session)
+    const clear = useCallback(() => {
+        if (!postId) return;
+
         setData(DEFAULT_POST_DATA);
-      }
-    } catch (error) {
-      console.error('[Grok Retry] Failed to load post storage:', error);
-      setData(DEFAULT_POST_DATA);
-    }
-    setIsLoading(false);
-  }, [postId]);
 
-  // Save to sessionStorage
-  const saveToPost = useCallback((updates: Partial<PostData>) => {
-    if (!postId) return;
+        // Clear persistent storage
+        const persistentKey = `${PERSISTENT_STORAGE_PREFIX}${postId}`;
+        chrome.storage.local.remove(persistentKey, () => {
+            if (chrome.runtime.lastError) {
+                console.error('[Grok Retry] Failed to clear persistent storage:', chrome.runtime.lastError);
+            } else {
+                console.log('[Grok Retry] Cleared persistent state for post:', postId);
+            }
+        });
 
-    setData((prev) => {
-      const updated = { ...prev, ...updates };
-      const storageKey = `${STORAGE_PREFIX}${postId}`;
-      try {
-        sessionStorage.setItem(storageKey, JSON.stringify(updated));
-      } catch (error) {
-        console.error('[Grok Retry] Failed to save post storage:', error);
-      }
-      return updated;
-    });
-  }, [postId]);
+        // Clear session storage
+        const sessionKey = `${SESSION_STORAGE_PREFIX}${postId}`;
+        try {
+            sessionStorage.removeItem(sessionKey);
+            console.log('[Grok Retry] Cleared session state for post:', postId);
+        } catch (error) {
+            console.error('[Grok Retry] Failed to clear session storage:', error);
+        }
+    }, [postId]);
 
-  // Save a specific key
-  const save = useCallback(<K extends keyof PostData>(
-    key: K,
-    value: PostData[K]
-  ) => {
-    saveToPost({ [key]: value });
-  }, [saveToPost]);
-
-  // Clear post data
-  const clear = useCallback(() => {
-    if (!postId) return;
-    
-    setData(DEFAULT_POST_DATA);
-    const storageKey = `${STORAGE_PREFIX}${postId}`;
-    try {
-      sessionStorage.removeItem(storageKey);
-      console.log('[Grok Retry] Cleared state for post:', postId);
-    } catch (error) {
-      console.error('[Grok Retry] Failed to clear post storage:', error);
-    }
-  }, [postId]);
-
-  return { data, save, saveAll: saveToPost, clear, isLoading };
+    return { data, save, saveAll: saveToPost, clear, isLoading };
 };
