@@ -35,13 +35,11 @@ const App: React.FC = () => {
 			return;
 		}
 
-		// Check for rapid failure (≤6 seconds) - indicates pre-flight moderation filter
+		// Check for rapid failure (≤6 seconds) - indicates immediate automated content check
 		if (retry.lastAttemptTime > 0) {
 			const timeSinceAttempt = Date.now() - retry.lastAttemptTime;
 			if (timeSinceAttempt <= 6000) {
-				console.warn(
-					"[Grok Retry] Rapid failure detected (<6s) - likely pre-flight moderation filter on prompt text"
-				);
+				console.warn("[Grok Retry] Rapid failure detected (<6s) - likely automated content check on prompt/image");
 				setRapidFailureDetected(true);
 			}
 		}

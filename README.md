@@ -10,7 +10,7 @@ A TypeScript-based Chrome extension that automatically retries video generation 
 - 🔄 Real-time progress in browser tab title with completion status
 - 🎨 Resizable, draggable UI panel with fullscreen maximize mode
 - 📊 Dynamic progress badges with color-coded status
-- ⚠️ Rapid failure detection warns of pre-flight moderation issues
+- ⚠️ Rapid failure detection warns of immediate automated content checks
 - 💚 Visual session indicator with pulsing active badge
 - 🔒 Hybrid storage - persistent preferences, session-aware state
 - 📦 Built with TypeScript and React for type safety and modern UI

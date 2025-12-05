@@ -55,13 +55,13 @@ export const RetryStats: React.FC<RetryStatsProps> = ({
 							<TooltipContent side="right" className="max-w-xs">
 								<p className="font-semibold mb-1">Rapid Moderation Failure</p>
 								<p className="text-xs mb-2">
-									Your video generation failed in less than 6 seconds, which strongly suggests your prompt
-									text is triggering the pre-flight moderation filter.
+									Your video generation failed in less than 6 seconds, indicating immediate automated
+									content moderation (likely checking prompt text, image content, or both).
 								</p>
 								<p className="text-xs">
-									Consider rephrasing your prompt, removing sensitive keywords, or trying a completely
-									different prompt. Sessions including rapid failures have a low success rate with
-									continued retries.
+									Consider rephrasing your prompt, using a different image, or trying a completely
+									different approach. Rapid failures are unlikely to succeed with continued retries on the
+									same content.
 								</p>
 							</TooltipContent>
 						</Tooltip>

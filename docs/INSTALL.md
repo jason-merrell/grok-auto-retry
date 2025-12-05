@@ -81,9 +81,9 @@
   - Orange when in progress (1 to goal-1)
   - Green when goal reached
 - **Rapid Failure Warning**: Alert icon appears when moderation occurs within 6 seconds
-  - Indicates pre-flight moderation filter triggered by prompt text
+  - Indicates immediate moderation (likely automated content check on prompt or image)
   - Automatically clears when you edit the prompt
-  - Suggests rephrasing prompt or removing sensitive keywords
+  - Suggests trying a different prompt, image, or approach
 - **Page Title Status**:
   - ✅ X/Y Complete = Video goal reached successfully
   - 🎬 X/Y = Video progress (when goal > 1)
@@ -161,10 +161,10 @@ npm run dev
 ### Rapid failure warning appearing
 
 - Warning appears when moderation occurs within 6 seconds of generation attempt
-- Indicates Grok's pre-flight filter is blocking the prompt before video generation starts
-- Try rephrasing your prompt or removing sensitive keywords
+- Indicates immediate automated content check (could be prompt text, image OCR, or both)
+- Try rephrasing your prompt, using a different image, or changing your approach
 - Warning automatically clears when you edit the prompt
-- Rapid failures are unlikely to succeed with continued retries
+- Rapid failures are unlikely to succeed with continued retries on the same content
 
 ### Video goal not working
 
