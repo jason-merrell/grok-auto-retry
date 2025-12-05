@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { usePostStorage } from './useSessionStorage';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
+const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
 const BUTTON_SELECTORS = [
     'button[aria-label="Redo"]',      // For retries after first generation
     'button[aria-label="Make video"]' // For first generation
@@ -180,6 +181,15 @@ export const useGrokRetry = (postId: string | null) => {
                 const spacingOk = now - lastClickTime >= CLICK_COOLDOWN;
                 const underLimit = postData.retryCount < postData.maxRetries;
                 const permitted = postData.canRetry === true;
+
+                // Check for session timeout (no success/failure feedback for too long)
+                const timeSinceLastAttempt = now - postData.lastAttemptTime;
+                if (timeSinceLastAttempt > SESSION_TIMEOUT) {
+                    console.warn('[Grok Retry] Session timeout - no feedback for 2 minutes, ending session');
+                    appendLog('Session timeout - ending (no success/failure feedback received)', 'warn');
+                    endSession();
+                    return;
+                }
 
                 if (!spacingOk || !underLimit || !permitted) return;
 
