@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { promptPartials } from "@/config/promptPartials";
-import { Plus } from "lucide-react";
+import { useCustomPartials } from "@/hooks/useCustomPartials";
+import { CustomPartialsDialog } from "@/components/CustomPartialsDialog";
+import { Plus, SettingsIcon } from "lucide-react";
 
 interface PromptPartialsProps {
 	onAppendPartial: (content: string, position: "prepend" | "append") => void;
@@ -13,29 +15,41 @@ interface PromptPartialsProps {
 export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial, disabled = false }) => {
 	const [open, setOpen] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState<string>("all");
+	const [dialogOpen, setDialogOpen] = useState(false);
+	const { customPartials, addPartial, updatePartial, deletePartial } = useCustomPartials();
 
-	const categories = Array.from(new Set(promptPartials.flatMap((p) => p.categories || [])));
+	// Combine built-in and custom partials
+	const allPartials = [...promptPartials, ...customPartials];
+	const categories = Array.from(new Set(allPartials.flatMap((p) => p.categories || [])));
 	const filteredPartials = (
-		selectedCategory === "all" ? promptPartials : promptPartials.filter((p) => p.categories?.includes(selectedCategory))
+		selectedCategory === "all" ? allPartials : allPartials.filter((p) => p.categories?.includes(selectedCategory))
 	).sort((a, b) => a.label.localeCompare(b.label));
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger asChild>
-				<div className="flex gap-1">
+			<div className="flex gap-1">
+				<PopoverTrigger asChild>
 					<Button
 						variant="outline"
 						size="sm"
 						role="combobox"
 						aria-expanded={open}
-						className="h-7 px-2 text-xs gap-1"
+						className="text-xs grow shrink-0 basis-0 min-w-0"
 						disabled={disabled}
 					>
 						<Plus className="h-3 w-3" />
 						Add Prompt Partial
 					</Button>
-				</div>
-			</PopoverTrigger>
+				</PopoverTrigger>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button variant="ghost" size="sm" onClick={() => setDialogOpen(true)} disabled={disabled}>
+							<SettingsIcon className="h-3 w-3" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>Manage custom partials</TooltipContent>
+				</Tooltip>
+			</div>
 			<PopoverContent className="w-80 p-3 h-[400px] flex flex-col" align="start">
 				<div className="space-y-1 shrink-0">
 					<div className="text-xs font-medium text-muted-foreground mb-2">Categories</div>
@@ -72,18 +86,26 @@ export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial,
 										<Button
 											variant="default"
 											size="sm"
-											className="h-7 px-2 gap-1 text-xs w-full justify-start"
+											className="h-7 px-2 gap-1 text-xs w-full justify-between"
 											onClick={() => {
 												onAppendPartial(partial.content, partial.position);
 												setOpen(false);
 											}}
 										>
-											<Plus className="h-3 w-3" />
-											{partial.label}
+											<span className="flex items-center gap-1">
+												<Plus className="h-3 w-3" />
+												{partial.label}
+											</span>
+											<span className="text-[10px] opacity-60 font-mono">
+												{partial.position === "prepend" ? "↑" : "↓"}
+											</span>
 										</Button>
 									</TooltipTrigger>
 									<TooltipContent className="max-w-[250px]">
 										<p className="text-xs">{partial.description}</p>
+										<p className="text-xs mt-1 opacity-70">
+											Position: {partial.position === "prepend" ? "↑ Before" : "↓ After"}
+										</p>
 									</TooltipContent>
 								</Tooltip>
 							))}
@@ -91,6 +113,15 @@ export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial,
 					</div>
 				</div>
 			</PopoverContent>
+
+			<CustomPartialsDialog
+				open={dialogOpen}
+				onOpenChange={setDialogOpen}
+				customPartials={customPartials}
+				onAdd={addPartial}
+				onUpdate={updatePartial}
+				onDelete={deletePartial}
+			/>
 		</Popover>
 	);
 };

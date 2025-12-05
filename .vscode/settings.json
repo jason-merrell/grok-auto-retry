@@ -18,5 +18,6 @@
         "tailwindcss/no-unnecessary-arbitrary-value"
     ],
     "eslint.validate": ["typescriptreact", "typescript", "javascriptreact", "javascript"],
-    "tailwindCSS.experimental.classRegex": [["ui:\\s*{([^)]*)\\s*}", "[\"'`]([^\"'`]*).*?[\"'`]"]]
+    "tailwindCSS.experimental.classRegex": [["ui:\\s*{([^)]*)\\s*}", "[\"'`]([^\"'`]*).*?[\"'`]"]],
+    "typescript.tsserver.experimental.enableProjectDiagnostics": false
 }
