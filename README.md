@@ -59,11 +59,7 @@ grok-retry-script/
 
 ### Installation
 
-1. Build the project: `cd extension && npm run build`
-2. Open Chrome Extensions: `chrome://extensions/`
-3. Enable "Developer mode" (top-right toggle)
-4. Click "Load unpacked" and select the `extension/dist` folder
-5. Navigate to <https://grok.com/imagine/post/*> to see the control panel
+See [docs/INSTALL.md](docs/INSTALL.md) for detailed installation instructions.
 
 ## Usage
 
@@ -82,7 +78,7 @@ grok-retry-script/
 - **+/-**: Adjust max retries and video goal
 - **Prompt Partials**: Quick-add categorized prompt modifiers with descriptions
 
-## Development
+## Contributing
 
 ### Type Safety
 
