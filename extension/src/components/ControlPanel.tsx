@@ -1,5 +1,7 @@
 import React from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ResizeHandle } from "./ResizeHandle";
 import { PanelHeader } from "./PanelHeader";
 import { RetryControls } from "./RetryControls";
@@ -36,6 +38,9 @@ interface ControlPanelProps {
 	onCopyToSite: () => void;
 	onGenerateVideo: () => void;
 	onCancelSession: () => void;
+	logs?: string[];
+	showDebug: boolean;
+	setShowDebug: (value: boolean) => void;
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -64,6 +69,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 	onCopyToSite,
 	onGenerateVideo,
 	onCancelSession,
+	logs = [],
+	showDebug,
+	setShowDebug,
 }) => {
 	return (
 		<Card
@@ -96,45 +104,148 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 					isSessionActive={isSessionActive}
 					onMinimize={onMinimize}
 					onMaximizeToggle={onMaximizeToggle}
+					onToggleDebug={() => setShowDebug(!showDebug)}
+					isDebug={showDebug}
+					retryCount={retryCount}
+					videosGenerated={videosGenerated}
 				/>
 			</CardHeader>
 
-			<CardContent className="space-y-3 overflow-auto flex-1" style={{ maxHeight: `${height - 140}px` }}>
-				<RetryControls autoRetryEnabled={autoRetryEnabled} onAutoRetryChange={onAutoRetryChange} />
+			<CardContent
+				className="space-y-3 overflow-auto flex-1"
+				style={isMaximized ? {} : { maxHeight: `${height - 140}px` }}
+			>
+				{showDebug ? (
+					<div className="font-mono text-xs whitespace-pre-wrap break-words">
+						<div className="flex items-center justify-between mb-2">
+							<div className="flex items-center gap-2">
+								<p className="text-sm font-semibold">Session Logs</p>
+								{isMaximized && isSessionActive && (
+									<>
+										{(() => {
+											// Retry badge color logic (same as RetryStats)
+											const retryPercentage = maxRetries > 0 ? (retryCount / maxRetries) * 100 : 0;
+											let retryClassName = "h-5 px-1.5 text-[10px] ";
+											if (retryPercentage === 0) {
+												retryClassName +=
+													"bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/30";
+											} else if (retryPercentage >= 80) {
+												retryClassName +=
+													"bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-500/30";
+											} else if (retryPercentage >= 50) {
+												retryClassName +=
+													"bg-orange-500/20 text-orange-700 dark:text-orange-400 hover:bg-orange-500/30";
+											} else {
+												retryClassName +=
+													"bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/30";
+											}
+											return (
+												<Badge className={retryClassName}>
+													{retryCount}/{maxRetries} retries
+												</Badge>
+											);
+										})()}
+										{(() => {
+											// Video badge color logic (same as RetryStats)
+											let videoClassName = "h-5 px-1.5 text-[10px] ";
+											if (videosGenerated === 0) {
+												videoClassName +=
+													"bg-secondary text-secondary-foreground hover:bg-secondary/80";
+											} else if (videosGenerated >= videoGoal) {
+												videoClassName +=
+													"bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/30";
+											} else {
+												videoClassName +=
+													"bg-orange-500/20 text-orange-700 dark:text-orange-400 hover:bg-orange-500/30";
+											}
+											return (
+												<Badge className={videoClassName}>
+													{videosGenerated}/{videoGoal} videos
+												</Badge>
+											);
+										})()}
+									</>
+								)}
+							</div>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									try {
+										const text = (logs || []).join("\n");
+										if (!text) return;
+										navigator.clipboard.writeText(text);
+									} catch (e) {
+										console.error("[Grok Retry] Failed to copy logs", e);
+									}
+								}}
+							>
+								Copy Logs
+							</Button>
+						</div>
+						{logs && logs.length ? (
+							<ul className="space-y-1">
+								{logs.map((line, i) => {
+									const isWarn = line.includes(" — WARN — ");
+									const isError = line.includes(" — ERROR — ");
+									const isSuccess = line.includes(" — SUCCESS — ");
+									const cls = isError
+										? "text-red-500"
+										: isWarn
+										? "text-yellow-500"
+										: isSuccess
+										? "text-green-500"
+										: "text-muted-foreground";
+									return (
+										<li key={i} className={cls}>
+											{line}
+										</li>
+									);
+								})}
+							</ul>
+						) : (
+							<p className="text-muted-foreground">No logs yet for this session.</p>
+						)}
+					</div>
+				) : (
+					<>
+						<RetryControls autoRetryEnabled={autoRetryEnabled} onAutoRetryChange={onAutoRetryChange} />
 
-				<RetryStats
-					retryCount={retryCount}
-					maxRetries={maxRetries}
-					videosGenerated={videosGenerated}
-					videoGoal={videoGoal}
-					rapidFailureDetected={rapidFailureDetected}
-				/>
+						<RetryStats
+							retryCount={retryCount}
+							maxRetries={maxRetries}
+							videosGenerated={videosGenerated}
+							videoGoal={videoGoal}
+							rapidFailureDetected={rapidFailureDetected}
+						/>
 
-				<MaxRetriesControls
-					maxRetries={maxRetries}
-					retryCount={retryCount}
-					onMaxRetriesChange={onMaxRetriesChange}
-					onResetRetries={onResetRetries}
-					disabled={!autoRetryEnabled}
-				/>
+						<MaxRetriesControls
+							maxRetries={maxRetries}
+							retryCount={retryCount}
+							onMaxRetriesChange={onMaxRetriesChange}
+							onResetRetries={onResetRetries}
+							disabled={!autoRetryEnabled}
+						/>
 
-				<VideoGoalControls
-					videoGoal={videoGoal}
-					videosGenerated={videosGenerated}
-					isSessionActive={isSessionActive}
-					onVideoGoalChange={onVideoGoalChange}
-					disabled={!autoRetryEnabled}
-				/>
+						<VideoGoalControls
+							videoGoal={videoGoal}
+							videosGenerated={videosGenerated}
+							isSessionActive={isSessionActive}
+							onVideoGoalChange={onVideoGoalChange}
+							disabled={!autoRetryEnabled}
+						/>
 
-				<PromptTextarea
-					value={promptValue}
-					onChange={onPromptChange}
-					onCopyFromSite={onCopyFromSite}
-					onCopyToSite={onCopyToSite}
-					disabled={!autoRetryEnabled}
-				/>
+						<PromptTextarea
+							value={promptValue}
+							onChange={onPromptChange}
+							onCopyFromSite={onCopyFromSite}
+							onCopyToSite={onCopyToSite}
+							disabled={!autoRetryEnabled}
+						/>
 
-				<PromptPartials onAppendPartial={onPromptAppend} disabled={!autoRetryEnabled} />
+						<PromptPartials onAppendPartial={onPromptAppend} disabled={!autoRetryEnabled} />
+					</>
+				)}
 			</CardContent>
 
 			<div className="px-6 pb-4 shrink-0 border-t border-border pt-3">

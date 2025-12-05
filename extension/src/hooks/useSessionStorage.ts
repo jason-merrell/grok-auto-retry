@@ -14,6 +14,9 @@ interface SessionData {
     isSessionActive: boolean;
     videosGenerated: number;
     lastAttemptTime: number;
+    lastFailureTime: number;
+    canRetry: boolean;
+    logs?: string[];
 }
 
 // Combined interface for external API
@@ -31,6 +34,9 @@ const DEFAULT_SESSION_DATA: SessionData = {
     isSessionActive: false,
     videosGenerated: 0,
     lastAttemptTime: 0,
+    lastFailureTime: 0,
+    canRetry: false,
+    logs: [],
 };
 
 const DEFAULT_POST_DATA: PostData = {
@@ -77,13 +83,30 @@ export const usePostStorage = (postId: string | null) => {
         });
     }, [postId]);
 
+    // Listen for log append events to update state in realtime
+    useEffect(() => {
+        const handler = (e: Event) => {
+            try {
+                const custom = e as CustomEvent<{ postId: string | null; line: string }>;
+                if (!postId || custom.detail?.postId !== postId) return;
+                const sessionKey = `${SESSION_STORAGE_PREFIX}${postId}`;
+                const stored = sessionStorage.getItem(sessionKey);
+                const existing = stored ? JSON.parse(stored) : {};
+                const logs = Array.isArray(existing.logs) ? existing.logs : [];
+                setData(prev => ({ ...prev, logs }));
+            } catch { }
+        };
+        window.addEventListener('grok:log', handler as EventListener);
+        return () => window.removeEventListener('grok:log', handler as EventListener);
+    }, [postId]);
+
     // Save to appropriate storage based on key type
     const saveToPost = useCallback((updates: Partial<PostData>) => {
         if (!postId) return;
 
         // Split updates into persistent and session data
         const persistentKeys: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal'];
-        const sessionKeys: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime'];
+        const sessionKeys: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs'];
 
         const persistentUpdates: Partial<PersistentData> = {};
         const sessionUpdates: Partial<SessionData> = {};
@@ -134,6 +157,27 @@ export const usePostStorage = (postId: string | null) => {
         saveToPost({ [key]: value });
     }, [saveToPost]);
 
+    // Append a log line to session logs
+    const appendLog = useCallback((line: string, level: 'info' | 'warn' | 'error' = 'info') => {
+        if (!postId) return;
+        const sessionKey = `${SESSION_STORAGE_PREFIX}${postId}`;
+        try {
+            const stored = sessionStorage.getItem(sessionKey);
+            const existing = stored ? JSON.parse(stored) : {};
+            const logs = Array.isArray(existing.logs) ? existing.logs : [];
+            const next = [...logs, `${new Date().toLocaleTimeString()} — ${level.toUpperCase()} — ${line}`].slice(-200);
+            sessionStorage.setItem(sessionKey, JSON.stringify({ ...existing, logs: next }));
+            // reflect in state
+            setData(prev => ({ ...prev, logs: next }));
+            // also dispatch event for live listeners
+            try {
+                window.dispatchEvent(new CustomEvent('grok:log', { detail: { postId, line, level } }));
+            } catch { }
+        } catch (error) {
+            console.error('[Grok Retry] Failed to append log:', error);
+        }
+    }, [postId]);
+
     // Clear post data (both persistent and session)
     const clear = useCallback(() => {
         if (!postId) return;
@@ -160,5 +204,5 @@ export const usePostStorage = (postId: string | null) => {
         }
     }, [postId]);
 
-    return { data, save, saveAll: saveToPost, clear, isLoading };
+    return { data, save, saveAll: saveToPost, clear, isLoading, appendLog };
 };

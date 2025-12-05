@@ -7,10 +7,11 @@ export const usePageTitle = (
     autoRetryEnabled: boolean,
     isRateLimited: boolean = false,
     videoGoal: number = 1,
-    videosGenerated: number = 0
+    videosGenerated: number = 0,
+    isSessionActive: boolean = false
 ) => {
     useEffect(() => {
-        if (!autoRetryEnabled || retryCount === 0) {
+        if (!autoRetryEnabled || (!isSessionActive && retryCount === 0)) {
             document.title = originalTitle;
             return;
         }
@@ -28,5 +29,5 @@ export const usePageTitle = (
         } else {
             document.title = `🔄 ${retryCount ?? 0}/${maxRetries ?? 3} ${originalTitle}`;
         }
-    }, [originalTitle, retryCount, maxRetries, autoRetryEnabled, isRateLimited, videoGoal, videosGenerated]);
+    }, [originalTitle, retryCount, maxRetries, autoRetryEnabled, isRateLimited, videoGoal, videosGenerated, isSessionActive]);
 };

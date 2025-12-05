@@ -17,6 +17,26 @@ const App: React.FC = () => {
 	// Only show on /imagine/post/* routes
 	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
 	const postId = usePostId();
+	// Provide a global append log helper used by detectors
+	useEffect(() => {
+		(window as any).__grok_append_log = (line: string, level: "info" | "warn" | "error" | "success" = "info") => {
+			const key = `grokRetrySession_${postId}`;
+			try {
+				const stored = sessionStorage.getItem(key);
+				const existing = stored ? JSON.parse(stored) : {};
+				const logs = Array.isArray(existing.logs) ? existing.logs : [];
+				const next = [...logs, `${new Date().toLocaleTimeString()} — ${level.toUpperCase()} — ${line}`].slice(-200);
+				sessionStorage.setItem(key, JSON.stringify({ ...existing, logs: next }));
+				// Notify listeners for live updates with level
+				window.dispatchEvent(new CustomEvent("grok:log", { detail: { postId, line, level } }));
+			} catch {}
+		};
+		return () => {
+			try {
+				delete (window as any).__grok_append_log;
+			} catch {}
+		};
+	}, [postId]);
 
 	const retry = useGrokRetry(postId);
 	const { data: uiPrefs, save: saveUIPref } = useStorage();
@@ -24,6 +44,7 @@ const App: React.FC = () => {
 	const panelResize = usePanelResize();
 	const miniDrag = useMiniToggleDrag();
 	const [rapidFailureDetected, setRapidFailureDetected] = React.useState(false);
+	const [showDebug, setShowDebug] = React.useState(false);
 	const nextVideoTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 	const hasCheckedInterruptedSession = React.useRef(false);
 
@@ -75,8 +96,8 @@ const App: React.FC = () => {
 			}
 		}
 
-		console.log("[Grok Retry] Auto-retrying...");
-		retry.clickMakeVideoButton(promptToUse);
+		// Mark failure detected and allow scheduler to perform the next retry
+		retry.markFailureDetected();
 	}, [retry, capturePromptFromSite]);
 
 	const { rateLimitDetected } = useModerationDetector(handleModerationDetected, retry.autoRetryEnabled);
@@ -109,7 +130,8 @@ const App: React.FC = () => {
 					return;
 				}
 				retry.resetRetries(); // Reset retry count for next video
-				retry.clickMakeVideoButton(retry.lastPromptValue);
+				// Use overridePermit since this is a new video generation, not a retry
+				retry.clickMakeVideoButton(retry.lastPromptValue, { overridePermit: true });
 				nextVideoTimeoutRef.current = null;
 			}, 8000);
 		}
@@ -119,14 +141,57 @@ const App: React.FC = () => {
 
 	// Auto-cancel interrupted sessions on mount (after refresh/navigation) - only once
 	useEffect(() => {
-		if (!retry.isLoading && !hasCheckedInterruptedSession.current) {
-			hasCheckedInterruptedSession.current = true;
+		console.log(
+			"[Grok Retry] Auto-cancel effect - isLoading:",
+			retry.isLoading,
+			"hasChecked:",
+			hasCheckedInterruptedSession.current,
+			"isSessionActive:",
+			retry.isSessionActive,
+			"postId:",
+			postId
+		);
+
+		// Wait for both loading to complete AND postId to be available
+		if (!retry.isLoading && postId && !hasCheckedInterruptedSession.current) {
+			console.log("[Grok Retry] Checking for interrupted session - isSessionActive:", retry.isSessionActive);
 			if (retry.isSessionActive) {
 				console.log("[Grok Retry] Detected active session after page load - auto-canceling interrupted session");
+				hasCheckedInterruptedSession.current = true;
 				retry.endSession();
+			} else {
+				// Only mark as checked if we've waited long enough for session data to load
+				// Use a small delay to ensure session state has fully settled
+				setTimeout(() => {
+					if (!retry.isSessionActive) {
+						console.log("[Grok Retry] No active session found after delay, marking as checked");
+						hasCheckedInterruptedSession.current = true;
+					}
+				}, 50);
 			}
 		}
-	}, [retry.isLoading, retry.isSessionActive, retry.endSession]);
+	}, [retry.isLoading, retry.isSessionActive, retry.endSession, postId]);
+
+	// Fallback check - run once after a short delay to catch any race conditions
+	useEffect(() => {
+		const timeoutId = setTimeout(() => {
+			console.log(
+				"[Grok Retry] Fallback timeout - hasChecked:",
+				hasCheckedInterruptedSession.current,
+				"isSessionActive:",
+				retry.isSessionActive,
+				"postId:",
+				postId
+			);
+			if (!hasCheckedInterruptedSession.current && retry.isSessionActive && postId) {
+				console.log("[Grok Retry] Fallback: Detected active session after delay - auto-canceling");
+				hasCheckedInterruptedSession.current = true;
+				retry.endSession();
+			}
+		}, 200);
+
+		return () => clearTimeout(timeoutId);
+	}, []);
 
 	// Set up page title updates
 	usePageTitle(
@@ -136,8 +201,14 @@ const App: React.FC = () => {
 		retry.autoRetryEnabled,
 		rateLimitDetected,
 		retry.videoGoal,
-		retry.videosGenerated
+		retry.videosGenerated,
+		retry.isSessionActive
 	);
+
+	// Auto-toggle debug panel based on session state
+	useEffect(() => {
+		setShowDebug(retry.isSessionActive);
+	}, [retry.isSessionActive]);
 
 	// Set up click listener for prompt capture
 	useEffect(() => {
@@ -203,7 +274,8 @@ const App: React.FC = () => {
 
 		setRapidFailureDetected(false);
 		retry.startSession();
-		retry.clickMakeVideoButton(promptToUse);
+		// Allow the initial manual click to proceed even before any failure notice
+		retry.clickMakeVideoButton(promptToUse, { overridePermit: true });
 	};
 
 	const handleCancelSession = () => {
@@ -276,6 +348,9 @@ const App: React.FC = () => {
 					onCopyToSite={handleCopyToSite}
 					onGenerateVideo={handleGenerateVideo}
 					onCancelSession={handleCancelSession}
+					logs={retry?.logs || []}
+					showDebug={showDebug}
+					setShowDebug={setShowDebug}
 				/>
 			</TooltipProvider>
 		</div>

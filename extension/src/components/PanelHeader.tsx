@@ -2,16 +2,29 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Minimize2, Minimize, Fullscreen } from "lucide-react";
+import { Minimize2, Minimize, Fullscreen, Bug } from "lucide-react";
 
 interface PanelHeaderProps {
 	isMaximized: boolean;
 	isSessionActive: boolean;
 	onMinimize: () => void;
 	onMaximizeToggle: () => void;
+	onToggleDebug?: () => void;
+	isDebug?: boolean;
+	retryCount?: number;
+	videosGenerated?: number;
 }
 
-export const PanelHeader: React.FC<PanelHeaderProps> = ({ isMaximized, isSessionActive, onMinimize, onMaximizeToggle }) => {
+export const PanelHeader: React.FC<PanelHeaderProps> = ({
+	isMaximized,
+	isSessionActive,
+	onMinimize,
+	onMaximizeToggle,
+	onToggleDebug,
+	isDebug,
+	retryCount,
+	videosGenerated,
+}) => {
 	return (
 		<div className="flex items-center justify-between">
 			<div className="flex items-center gap-2">
@@ -31,6 +44,19 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({ isMaximized, isSession
 				)}
 			</div>
 			<div className="flex gap-1">
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							variant={isDebug ? "secondary" : "ghost"}
+							size="icon"
+							className="h-7 w-7"
+							onClick={onToggleDebug}
+						>
+							<Bug className="h-4 w-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>{isDebug ? "Hide Logs" : "Show Logs"}</TooltipContent>
+				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMaximizeToggle}>

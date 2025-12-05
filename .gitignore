@@ -3,3 +3,5 @@ dist/
 *.log
 *.log
 .DS_Store
+docs/eval**
+.scratch/**
