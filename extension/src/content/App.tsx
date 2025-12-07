@@ -48,7 +48,7 @@ const ImaginePostApp: React.FC = () => {
 	const [rapidFailureDetected, setRapidFailureDetected] = React.useState(false);
 	const [showDebug, setShowDebug] = React.useState(false);
 	const [settingsOpen, setSettingsOpen] = React.useState(false);
-	const nextVideoTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+	const nextVideoTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 	const hasCheckedInterruptedSession = React.useRef(false);
 
 	// Handle moderation detection
