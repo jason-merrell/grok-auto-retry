@@ -1,10 +1,6 @@
 name: Build and Draft Release
 
 on:
-    pull_request:
-        types: [opened, synchronize, reopened]
-        branches:
-            - main
     workflow_dispatch:
         inputs:
             version_bump:
@@ -19,7 +15,6 @@ on:
 
 permissions:
     contents: write
-    pull-requests: write
 
 jobs:
     build-and-release:
@@ -113,49 +108,25 @@ jobs:
                       core.setOutput('tag', '');
                       return '';
 
-            - name: Generate changelog with Copilot
+            - name: Generate changelog
               id: changelog
               uses: actions/github-script@v7
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
                   script: |
-                      let commitMessages = '';
-                      let prInfo = '';
                       const lastTag = '${{ steps.last_release.outputs.tag }}';
+                      const compareBase = lastTag || 'HEAD~10'; // Last release or last 10 commits
 
-                      // If triggered by PR, get PR commits and details
-                      if (context.payload.pull_request) {
-                        const { data: commits } = await github.rest.pulls.listCommits({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          pull_number: context.payload.pull_request.number
-                        });
-                        
-                        commitMessages = commits.map(c => `- ${c.commit.message.split('\n')[0]}`).join('\n');
-                        
-                        const { data: pr } = await github.rest.pulls.get({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          pull_number: context.payload.pull_request.number
-                        });
-                        
-                        prInfo = `**PR #${pr.number}: ${pr.title}**\n\n### Description\n${pr.body || 'No description provided.'}\n\n`;
-                      } 
-                      // If manual trigger, get commits since last release
-                      else {
-                        const compareBase = lastTag || 'HEAD~10'; // Last release or last 10 commits
-                        
-                        const { data: comparison } = await github.rest.repos.compareCommits({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          base: compareBase,
-                          head: context.sha
-                        });
-                        
-                        commitMessages = comparison.commits
-                          .map(c => `- ${c.commit.message.split('\n')[0]}`)
-                          .join('\n');
-                      }
+                      const { data: comparison } = await github.rest.repos.compareCommits({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        base: compareBase,
+                        head: context.sha
+                      });
+
+                      const commitMessages = comparison.commits
+                        .map(c => `- ${c.commit.message.split('\n')[0]}`)
+                        .join('\n');
 
                       // Generate changelog content
                       const compareUrl = lastTag 
@@ -164,7 +135,7 @@ jobs:
 
                       const changelog = `## What's Changed in v${{ steps.bump_version.outputs.new_version }}
 
-                      ${prInfo}### Changes
+                      ### Changes
                       ${commitMessages}
 
                       **Full Changelog**: ${compareUrl}`;
@@ -194,34 +165,7 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
-            - name: Comment on PR
-              if: github.event_name == 'pull_request'
-              uses: actions/github-script@v7
-              with:
-                  github-token: ${{ secrets.GITHUB_TOKEN }}
-                  script: |
-                      const changelog = `${{ steps.changelog.outputs.changelog }}`;
-
-                      await github.rest.issues.createComment({
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        issue_number: context.payload.pull_request.number,
-                        body: `## 🚀 Draft Release Created
-
-                      A draft release has been created for version **v${{ steps.bump_version.outputs.new_version }}** (${`${{ steps.bump_version.outputs.bump_type }}`} bump)
-
-                      ${changelog}
-
-                      ### Next Steps
-                      1. Review the draft release [here](https://github.com/${context.repo.owner}/${context.repo.repo}/releases)
-                      2. Make any necessary edits to the changelog
-                      3. Publish the release when ready
-
-                      📦 The extension zip file is attached to the draft release.`
-                      });
-
-            - name: Summary for manual trigger
-              if: github.event_name == 'workflow_dispatch'
+            - name: Workflow summary
               run: |
                   echo "## 🚀 Draft Release Created" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
