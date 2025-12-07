@@ -40,15 +40,15 @@ export function isSuccessStateGenerateButton(btn: HTMLButtonElement | null): boo
     const cls = btn.className || '';
     const hasSvg = !!btn.querySelector('svg');
     if (!hasSvg) return false;
-
+    
     // Check if we're in active generation state (progress button present)
     const progressButton = document.querySelector('button[aria-label="Video Options"]');
     const hasProgressPercentage = progressButton?.textContent?.match(/\d+%/);
     if (hasProgressPercentage) return false; // Don't trigger during active generation
-
+    
     const text = btn.textContent?.trim() || '';
     const isIconOnly = text.length === 0 && cls.includes('w-8') && cls.includes('h-8');
     const isRedoText = text === 'Redo' && cls.includes('h-8');
-
+    
     return isIconOnly || isRedoText;
 }

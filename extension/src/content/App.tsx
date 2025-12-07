@@ -12,8 +12,9 @@ import { useRouteMatch } from "@/hooks/useRouteMatch";
 import { usePostId } from "@/hooks/usePostId";
 import { ControlPanel } from "@/components/ControlPanel";
 import { MiniToggle } from "@/components/MiniToggle";
+import { ImaginePanel } from "@/components/ImaginePanel";
 
-const App: React.FC = () => {
+const ImaginePostApp: React.FC = () => {
 	// Only show on /imagine/post/* routes
 	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
 	const postId = usePostId();
@@ -355,6 +356,149 @@ const App: React.FC = () => {
 			</TooltipProvider>
 		</div>
 	);
+};
+
+const ImagineRootApp: React.FC = () => {
+	const { data: uiPrefs, save: saveUIPref } = useStorage();
+	const panelResize = usePanelResize();
+	const miniDrag = useMiniToggleDrag();
+	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
+	const initialStoredPrompt = uiPrefs.imaginePromptValue ?? "";
+	const [promptValue, setPromptValue] = React.useState(initialStoredPrompt);
+	const lastStoredPromptRef = React.useRef(initialStoredPrompt);
+
+	useEffect(() => {
+		return setupClickListener((value) => {
+			setPromptValue(value);
+		});
+	}, [setupClickListener]);
+
+	useEffect(() => {
+		const storedPrompt = uiPrefs.imaginePromptValue ?? "";
+		if (storedPrompt !== lastStoredPromptRef.current) {
+			lastStoredPromptRef.current = storedPrompt;
+			setPromptValue(storedPrompt);
+		}
+	}, [uiPrefs.imaginePromptValue]);
+
+	useEffect(() => {
+		const handle = setTimeout(() => {
+			saveUIPref("imaginePromptValue", promptValue);
+			lastStoredPromptRef.current = promptValue;
+		}, 300);
+		return () => clearTimeout(handle);
+	}, [promptValue, saveUIPref]);
+
+	const handlePromptChange = React.useCallback((value: string) => {
+		setPromptValue(value);
+	}, []);
+
+	const handleCopyFromSite = React.useCallback(() => {
+		const value = capturePromptFromSite();
+		if (value) {
+			setPromptValue(value);
+		}
+	}, [capturePromptFromSite]);
+
+	const handleCopyToSite = React.useCallback(() => {
+		if (promptValue) {
+			copyPromptToSite(promptValue);
+		}
+	}, [copyPromptToSite, promptValue]);
+
+	const handlePromptAppend = React.useCallback((partial: string, position: "prepend" | "append") => {
+		setPromptValue((currentPrompt) => {
+			const partialContent = partial.trim().replace(/\.$/, "");
+			if (currentPrompt.toLowerCase().includes(partialContent.toLowerCase())) {
+				return currentPrompt;
+			}
+			return position === "prepend" ? partial + currentPrompt : currentPrompt + partial;
+		});
+	}, []);
+
+	const handleGenerateImages = React.useCallback(() => {
+		const trimmed = promptValue.trim();
+		if (!trimmed) {
+			return;
+		}
+
+		const copied = copyPromptToSite(trimmed);
+		if (!copied) {
+			return;
+		}
+
+		const submitButton = document.querySelector<HTMLButtonElement>('form button[type="submit"]');
+		if (submitButton) {
+			if (submitButton.disabled) {
+				submitButton.removeAttribute("disabled");
+			}
+			submitButton.focus();
+			submitButton.click();
+		}
+	}, [copyPromptToSite, promptValue]);
+
+	const handleMinimizeClick = React.useCallback(() => {
+		if (!miniDrag.dragMoved) {
+			saveUIPref("isMinimized", !uiPrefs.isMinimized);
+		}
+	}, [miniDrag.dragMoved, saveUIPref, uiPrefs.isMinimized]);
+
+	const handleMaximizeToggle = React.useCallback(() => {
+		saveUIPref("isMaximized", !uiPrefs.isMaximized);
+	}, [saveUIPref, uiPrefs.isMaximized]);
+
+	if (uiPrefs.isMinimized) {
+		return (
+			<div className="dark animate-in fade-in duration-200">
+				<TooltipProvider>
+					<MiniToggle
+						position={miniDrag.position}
+						isDragging={miniDrag.isDragging}
+						dragMoved={miniDrag.dragMoved}
+						onDragStart={miniDrag.handleDragStart}
+						onRestore={handleMinimizeClick}
+					/>
+				</TooltipProvider>
+			</div>
+		);
+	}
+
+	return (
+		<div className={`dark animate-in fade-in duration-300 ${!uiPrefs.isMaximized ? "slide-in-from-right-4" : ""}`}>
+			<TooltipProvider>
+				<ImaginePanel
+					width={panelResize.width}
+					height={panelResize.height}
+					fontSize={panelResize.fontSize}
+					isMaximized={uiPrefs.isMaximized}
+					promptValue={promptValue}
+					onPromptChange={handlePromptChange}
+					onPromptAppend={handlePromptAppend}
+					onCopyFromSite={handleCopyFromSite}
+					onCopyToSite={handleCopyToSite}
+					onResizeStart={panelResize.handleResizeStart}
+					onMinimize={() => saveUIPref("isMinimized", true)}
+					onMaximizeToggle={handleMaximizeToggle}
+					onGenerateImages={handleGenerateImages}
+				/>
+			</TooltipProvider>
+		</div>
+	);
+};
+
+const App: React.FC = () => {
+	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
+	const isImagineRootRoute = useRouteMatch("^/imagine/?$");
+
+	if (isImaginePostRoute) {
+		return <ImaginePostApp />;
+	}
+
+	if (isImagineRootRoute) {
+		return <ImagineRootApp />;
+	}
+
+	return null;
 };
 
 export default App;

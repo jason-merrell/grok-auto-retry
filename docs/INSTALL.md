@@ -21,12 +21,43 @@
    - The extension should now appear in your extensions list
 
 5. **Verify installation:**
-   - Navigate to https://grok.com
-   - You should see the Grok Auto Retry panel in the bottom-right corner
+   - Navigate to <https://grok.com/imagine> or <https://grok.com/imagine/post/*>
+   - You should see the control panel in the bottom-right corner
 
 ## Features
 
+### Route-Specific Panels
+
+The extension provides different functionality based on the current route:
+
+**Image Generation Panel** (`/imagine` route):
+
+- Lightweight prompt editor with saved prompts and partials
+- "Generate Images" button copies prompt to site and clicks submit
+- Prompt persists across page reloads
+- No auto-retry or session management (single generation workflow)
+- ProseMirror contenteditable support for site integration
+
+**Video Generation Panel** (`/imagine/post/*` routes):
+
+- Full auto-retry workflow with session management
+- Video goal system for batch generation
+- Real-time progress tracking and debug logs
+- Per-post state isolation
+- Textarea-based prompt capture
+
+### Saved Prompts
+
+- **Global Storage**: Saved prompts work across all routes and posts
+- **Save Button**: Save current prompt with a custom name
+- **Load Dropdown**: Alphabetically sorted list of saved prompts (click to load)
+- **Management**: Rename or delete saved prompts via dialog
+- **Form-based UI**: 480px wide dialog with improved textarea font size
+- **Real-time Sync**: Changes automatically sync across all tabs
+- **Persistent Storage**: Saved to Chrome storage, survives browser restarts
+
 ### Auto-Retry System
+
 - Automatically detects "Content Moderated" messages and retries
 - Detects "Rate limit reached" messages and waits 60 seconds before retrying
 - Retries the request with your saved prompt
@@ -34,6 +65,7 @@
 - Configurable max retries (1-50, default: 3)
 
 ### Video Goal System
+
 - Set a goal for number of videos to generate (1-50)
 - Automatically generates multiple videos with 8-second delays between successes
 - Resets retry count for each new video
@@ -41,6 +73,7 @@
 - Progress shown in page title: 🎬 X/Y | 🔄 retries
 
 ### UI Controls
+
 - **Enable/Disable**: Toggle auto-retry on/off
 - **Session Indicator**: Green "ACTIVE" badge appears next to title when session is running
 - **Debug Panel**: Toggle between normal controls and real-time session logs with severity colors
@@ -165,7 +198,8 @@ npm run dev
 
 - Check that extension is enabled in `chrome://extensions/`
 - Verify the match pattern in `manifest.json` includes grok.com
-- Extension only appears on `/imagine/post/*` routes (not auth.grok.com)
+- Extension appears on `/imagine` (image generation) and `/imagine/post/*` (video generation) routes
+- Not available on auth.grok.com or other routes
 - Hard refresh the page (Cmd+Shift+R or Ctrl+Shift+F5)
 
 ### Auto-retry not working
@@ -221,6 +255,30 @@ npm run dev
 - Session logs are cleared when new sessions start for the same post
 - Check that you're on the correct post (logs are isolated per post ID)
 - In fullscreen debug mode, retry/video progress badges appear beside "Session Logs" header
+- **Note**: Debug toggle only appears on video generation routes (`/imagine/post/*`)
+
+### Saved prompts not loading
+
+- Click directly on the prompt name in the Load dropdown
+- Prompts are sorted alphabetically for easy finding
+- If prompt flashes then disappears, try reloading the extension
+- Check Chrome storage quota (unlikely but possible if many prompts saved)
+- Saved prompts sync in real-time across all tabs
+
+### Image generation panel not working
+
+- Ensure you're on the `/imagine` route (not `/imagine/post/*`)
+- "Generate Images" button copies prompt to ProseMirror editor then clicks submit
+- Prompt automatically saves to storage every 300ms while typing
+- Prompt persists across page reloads
+- Panel does not include retry functionality (single generation workflow)
+
+### Font sizes too small/large
+
+- Base font sizes scale 20% larger when panel is maximized (minimum 14px)
+- Textarea font changes from text-xs to text-sm when maximized
+- Saved prompts dialog uses larger textarea font (text-sm) and wider form (480px)
+- Return to normal size mode if text is too large
 
 ## Uninstall
 

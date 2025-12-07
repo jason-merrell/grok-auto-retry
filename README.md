@@ -6,6 +6,8 @@ A TypeScript-based Chrome extension that automatically retries video generation 
 
 - ✅ Auto-retry on content moderation with configurable max retries
 - 🎬 Video goal system - automatically generate multiple videos with 8-second delays
+- 🖼️ Image generation panel for `/imagine` routes with one-click generation
+- 💾 Saved prompts - save, load, rename, and manage your favorite prompts globally
 - 📝 Prompt preservation and quick-add prompt partials with categories
 - 🔄 Real-time progress in browser tab title with completion status
 - 🎨 Resizable, draggable UI panel with fullscreen maximize mode
@@ -67,21 +69,35 @@ See [docs/INSTALL.md](docs/INSTALL.md) for detailed installation instructions.
 
 ## Usage
 
+### Video Generation (`/imagine/post/*` routes)
+
 1. Enable auto-retry using the toggle switch
 2. Set max retries (1-50) and video goal (1-50)
 3. Click "Copy from site" to capture the current prompt or type your own
 4. Use prompt partials to quickly add common modifiers (Style, Lighting, Mood, etc.)
-5. Click "Generate Video" to start - the system will automatically retry on moderation
-6. Monitor progress in the browser tab title, dynamic status badges, and real-time debug logs
+5. Save prompts for reuse with the "Save" button
+6. Load previously saved prompts from the dropdown menu
+7. Click "Generate Video" to start - the system will automatically retry on moderation
+8. Monitor progress in the browser tab title, dynamic status badges, and real-time debug logs
+
+### Image Generation (`/imagine` route)
+
+1. Type or paste your prompt in the textarea
+2. Use prompt partials to enhance your prompt
+3. Save prompts for reuse or load previously saved prompts
+4. Click "Generate Images" to copy prompt to site and start generation
+5. Prompt automatically persists across page reloads
 
 ### Controls
 
 - **Minimize**: Collapse panel to a draggable button (bottom-right)
-- **Maximize**: Expand panel to fullscreen
-- **Debug Toggle**: Switch between normal view and real-time session logs
+- **Maximize**: Expand panel to fullscreen (fonts scale 20% larger)
+- **Debug Toggle**: Switch between normal view and real-time session logs (video routes only)
 - **Reset count**: Reset retry counter to 0
 - **+/-**: Adjust max retries and video goal
 - **Prompt Partials**: Quick-add categorized prompt modifiers with descriptions
+- **Save/Load**: Manage globally saved prompts with rename and delete options
+- **Import/Export**: Import or export prompt text files
 
 ## Contributing
 

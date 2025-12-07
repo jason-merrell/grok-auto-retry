@@ -40,19 +40,21 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 				)}
 			</div>
 			<div className="flex gap-1">
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							variant={isDebug ? "secondary" : "ghost"}
-							size="icon"
-							className="h-7 w-7"
-							onClick={onToggleDebug}
-						>
-							<Bug className="h-4 w-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>{isDebug ? "Hide Logs" : "Show Logs"}</TooltipContent>
-				</Tooltip>
+				{onToggleDebug && (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant={isDebug ? "secondary" : "ghost"}
+								size="icon"
+								className="h-7 w-7"
+								onClick={onToggleDebug}
+							>
+								<Bug className="h-4 w-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>{isDebug ? "Hide Logs" : "Show Logs"}</TooltipContent>
+					</Tooltip>
+				)}
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMaximizeToggle}>

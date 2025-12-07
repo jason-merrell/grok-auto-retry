@@ -1,21 +1,17 @@
 {
-  "manifest_version": 3,
-  "name": "Grok Auto Retry",
-  "version": "2.0.0",
-  "description": "Automatically retry when Grok content moderation blocks your request",
-  "permissions": [
-    "storage"
-  ],
-  "host_permissions": [
-    "https://grok.com/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": ["https://grok.com/*"],
-      "exclude_matches": ["https://auth.grok.com/*"],
-      "js": ["content.js"],
-      "css": ["style.css"],
-      "run_at": "document_idle"
-    }
-  ]
+    "manifest_version": 3,
+    "name": "Grok Auto Retry",
+    "version": "2.0.0",
+    "description": "Automatically retry when Grok content moderation blocks your request",
+    "permissions": ["storage"],
+    "host_permissions": ["https://grok.com/*"],
+    "content_scripts": [
+        {
+            "matches": ["https://grok.com/*"],
+            "exclude_matches": ["https://auth.grok.com/*"],
+            "js": ["content.js"],
+            "css": ["style.css"],
+            "run_at": "document_idle"
+        }
+    ]
 }
