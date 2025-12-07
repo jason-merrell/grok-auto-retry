@@ -1,13 +1,28 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { selectors, isSuccessStateGenerateButton } from '../config/selectors';
 import { usePostId } from './usePostId';
+import { useGlobalSettings } from './useGlobalSettings';
 
 const VIDEO_SELECTOR = selectors.success.legacyVideo;
 
+// Default button selectors supporting multiple languages
+const DEFAULT_BUTTON_SELECTORS = [
+    'button[aria-label="Make video"]',     // English
+    'button[aria-label="Crear video"]',    // Spanish
+    'button[aria-label="Redo"]',           // English
+    'button[aria-label="Rehacer"]',        // Spanish
+];
+
 export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) => {
     const postId = usePostId();
+    const { settings } = useGlobalSettings();
     const [lastVideoSrc, setLastVideoSrc] = useState<string | null>(null);
     const lastSuccessAtRef = useRef<number>(0);
+
+    // Use custom selector if provided, otherwise try all default multi-language selectors
+    const buttonSelectors = settings.customSelectors?.makeVideoButton 
+        ? [settings.customSelectors.makeVideoButton]
+        : DEFAULT_BUTTON_SELECTORS;
 
     const checkVideoSuccess = useCallback(() => {
         if (!isEnabled) return;
@@ -18,8 +33,13 @@ export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) =>
             return;
         }
 
-        // Condition A: generate button in success state (icon-only or 'Redo')
-        const genBtn = document.querySelector<HTMLButtonElement>(selectors.success.iconOnlyGenerateButton);
+        // Condition A: generate button in success state (icon-only or 'Redo'/'Rehacer')
+        // Try to find the button using any of the supported selectors
+        let genBtn: HTMLButtonElement | null = null;
+        for (const selector of buttonSelectors) {
+            genBtn = document.querySelector<HTMLButtonElement>(selector);
+            if (genBtn) break;
+        }
         const buttonInSuccessState = isSuccessStateGenerateButton(genBtn);
 
         // Condition B: video src changed since baseline
@@ -61,7 +81,7 @@ export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) =>
         if (buttonInSuccessState && videoChanged && isNextVideoButtonVisible) {
             console.log('[Grok Retry] Success detection blocked - next video button visible (user browsing previous videos)');
         }
-    }, [lastVideoSrc, isEnabled, onSuccess]);
+    }, [lastVideoSrc, isEnabled, onSuccess, postId, buttonSelectors]);
 
     useEffect(() => {
         if (!isEnabled) return;

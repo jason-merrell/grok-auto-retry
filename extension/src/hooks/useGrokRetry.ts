@@ -1,20 +1,32 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { usePostStorage } from './useSessionStorage';
+import { useGlobalSettings } from './useGlobalSettings';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
 const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
-const BUTTON_SELECTORS = [
-    'button[aria-label="Redo"]',      // For retries after first generation
-    'button[aria-label="Make video"]' // For first generation
+
+// Default button selectors supporting multiple languages
+const DEFAULT_BUTTON_SELECTORS = [
+    'button[aria-label="Redo"]',           // English - retries after first generation
+    'button[aria-label="Rehacer"]',        // Spanish - retries after first generation
+    'button[aria-label="Make video"]',     // English - first generation
+    'button[aria-label="Crear video"]',    // Spanish - first generation
 ];
+
 const TEXTAREA_SELECTOR = 'textarea[aria-label="Make a video"][placeholder="Type to customize video..."]';
 
 export const useGrokRetry = (postId: string | null) => {
     const { data: postData, save, saveAll, isLoading, appendLog } = usePostStorage(postId);
+    const { settings } = useGlobalSettings();
 
     const [lastClickTime, setLastClickTime] = useState(0);
     const [originalPageTitle, setOriginalPageTitle] = useState('');
     const schedulerRef = useRef<number | null>(null);
+    
+    // Use custom selector if provided, otherwise use default multi-language selectors
+    const buttonSelectors = settings.customSelectors?.makeVideoButton 
+        ? [settings.customSelectors.makeVideoButton]
+        : DEFAULT_BUTTON_SELECTORS;
 
     // Initialize original page title
     useEffect(() => {
@@ -98,7 +110,7 @@ export const useGrokRetry = (postId: string | null) => {
 
         // Try to find the button using either selector
         let button: HTMLButtonElement | null = null;
-        for (const selector of BUTTON_SELECTORS) {
+        for (const selector of buttonSelectors) {
             button = document.querySelector<HTMLButtonElement>(selector);
             if (button) {
                 console.log('[Grok Retry] Found button with selector:', selector);
@@ -107,7 +119,7 @@ export const useGrokRetry = (postId: string | null) => {
         }
 
         if (!button) {
-            console.log('[Grok Retry] Button not found with any selector:', BUTTON_SELECTORS.join(' | '));
+            console.log('[Grok Retry] Button not found with any selector:', buttonSelectors.join(' | '));
             appendLog('Button not found — selectors failed', 'warn');
             return false;
         }
@@ -160,7 +172,7 @@ export const useGrokRetry = (postId: string | null) => {
         appendLog('Clicked — attempt started', 'info');
 
         return true;
-    }, [lastClickTime, retryCount, save, canRetry]);
+    }, [lastClickTime, retryCount, save, canRetry, buttonSelectors, appendLog, postData.lastPromptValue, postId]);
 
     // Lightweight scheduler to avoid getting stuck between detector callbacks
     useEffect(() => {

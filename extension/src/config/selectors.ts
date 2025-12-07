@@ -66,7 +66,8 @@ export function isSuccessStateGenerateButton(btn: HTMLButtonElement | null): boo
     
     const text = btn.textContent?.trim() || '';
     const isIconOnly = text.length === 0 && cls.includes('w-8') && cls.includes('h-8');
-    const isRedoText = text === 'Redo' && cls.includes('h-8');
+    // Support both English "Redo" and Spanish "Rehacer"
+    const isRedoText = (text === 'Redo' || text === 'Rehacer') && cls.includes('h-8');
     
     return isIconOnly || isRedoText;
 }
