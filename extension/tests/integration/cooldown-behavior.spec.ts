@@ -49,6 +49,10 @@ test('scheduler respects cooldown timing', async ({ page }) => {
       storage: {
         local: storageArea,
         sync: makeStorageArea(),
+        onChanged: {
+          addListener: () => {},
+          removeListener: () => {},
+        },
       },
       runtime: {
         lastError: null,
@@ -147,7 +151,7 @@ test('scheduler respects cooldown timing', async ({ page }) => {
     t.startSession();
     t.mergeSession?.({ lastPromptValue: 'Retry prompt from test', autoRetryEnabled: true, maxRetries: 3 }, id);
     t.markFailureDetected();
-    t.mergeSession?.({ isSessionActive: true, canRetry: true }, id);
+    t.mergeSession?.({ isSessionActive: true, canRetry: true, lastAttemptTime: Date.now() }, id);
   }, TEST_POST_ID);
   const lastSave = await page.evaluate(() => (window as any).__grok_lastSave ?? null);
   console.log('last save', lastSave);
