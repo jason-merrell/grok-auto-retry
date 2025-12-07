@@ -15,6 +15,7 @@ export const useGrokRetry = (postId: string | null) => {
     const [lastClickTime, setLastClickTime] = useState(0);
     const [originalPageTitle, setOriginalPageTitle] = useState('');
     const schedulerRef = useRef<number | null>(null);
+    const cooldownTimeoutRef = useRef<number | null>(null);
 
     // Initialize original page title
     useEffect(() => {
@@ -25,14 +26,21 @@ export const useGrokRetry = (postId: string | null) => {
 
     const maxRetries = postData.maxRetries;
     const autoRetryEnabled = postData.autoRetryEnabled;
-    const retryCount = postData.retryCount;
     const lastPromptValue = postData.lastPromptValue;
     const isSessionActive = postData.isSessionActive;
     const videoGoal = postData.videoGoal;
     const videosGenerated = postData.videosGenerated;
     const lastAttemptTime = postData.lastAttemptTime;
     const lastFailureTime = postData.lastFailureTime;
-    const canRetry = postData.canRetry;
+
+    try {
+        const w = window as any;
+        w.__grok_retryState = {
+            isSessionActive: postData.isSessionActive,
+            retryCount: postData.retryCount,
+            canRetry: postData.canRetry,
+        };
+    } catch {}
 
     const setMaxRetries = useCallback((value: number) => {
         const clamped = Math.max(1, Math.min(50, value));
@@ -75,6 +83,26 @@ export const useGrokRetry = (postId: string | null) => {
         save('videosGenerated', 0);
     }, [save]);
 
+    const markFailureDetected = useCallback(() => {
+        const now = Date.now();
+        // Avoid enabling immediate duplicate retries if a click just occurred
+        const justClicked = now - lastClickTime < 250;
+        const enableRetry = !justClicked;
+        saveAll({ lastFailureTime: now, canRetry: enableRetry, isSessionActive: true });
+    }, [lastClickTime, saveAll]);
+
+    useEffect(() => {
+        try {
+            const w: any = window;
+            w.__grok_test = w.__grok_test || {};
+            w.__grok_test.startSession = () => startSession();
+            w.__grok_test.endSession = () => endSession();
+            w.__grok_test.markFailureDetected = () => markFailureDetected();
+            w.__grok_test.__retryBridgeVersion = 'grok-retry@1';
+            w.__grok_test.__retryPostId = postId;
+        } catch {}
+    }, [startSession, endSession, markFailureDetected, postId]);
+
     // Click the "Make video" button with React-style value setting
     const clickMakeVideoButton = useCallback((promptValue?: string, options?: { overridePermit?: boolean }) => {
         const now = Date.now();
@@ -84,14 +112,20 @@ export const useGrokRetry = (postId: string | null) => {
             console.log(`[Grok Retry] Cooldown active, retrying in ${Math.ceil(timeUntilReady / 1000)}s...`);
             appendLog(`Cooldown active — next attempt in ${Math.ceil(timeUntilReady / 1000)}s`, 'info');
             // Schedule the click after cooldown
-            setTimeout(() => {
-                clickMakeVideoButton(promptValue);
+            if (cooldownTimeoutRef.current) {
+                clearTimeout(cooldownTimeoutRef.current);
+                cooldownTimeoutRef.current = null;
+            }
+            cooldownTimeoutRef.current = window.setTimeout(() => {
+                cooldownTimeoutRef.current = null;
+                // Use overridePermit to ensure single, controlled retry after cooldown
+                clickMakeVideoButton(promptValue, { overridePermit: true });
             }, timeUntilReady);
             return false;
         }
 
         // Guard: only click after a failure notification explicitly enables retry
-        if (!canRetry && !options?.overridePermit) {
+        if (!postData.canRetry && !options?.overridePermit) {
             appendLog('Guard — waiting for failure notification before retrying');
             return false;
         }
@@ -160,10 +194,21 @@ export const useGrokRetry = (postId: string | null) => {
         appendLog('Clicked — attempt started', 'info');
 
         return true;
-    }, [lastClickTime, retryCount, save, canRetry]);
+    }, [lastClickTime, save, postData.canRetry, postData.lastPromptValue, postId]);
 
     // Lightweight scheduler to avoid getting stuck between detector callbacks
     useEffect(() => {
+        try {
+            const w = window as any;
+            w.__grok_schedulerGate = {
+                autoRetryEnabled,
+                maxRetries,
+                isLoading,
+                hasPostId: !!postId,
+                isSessionActive: postData.isSessionActive,
+            };
+        } catch {}
+
         if (!autoRetryEnabled || maxRetries <= 0) return;
         if (isLoading) return;
         if (!postId) return;
@@ -176,7 +221,15 @@ export const useGrokRetry = (postId: string | null) => {
 
         // Start scheduler when session is active; tick every 3 seconds
         if (postData.isSessionActive) {
+            const w = window as any;
+            try {
+                w.__grok_schedulerTick = w.__grok_schedulerTick || 0;
+                w.__grok_schedulerActive = true;
+            } catch {}
             schedulerRef.current = window.setInterval(() => {
+                try {
+                    w.__grok_schedulerTick = (w.__grok_schedulerTick || 0) + 1;
+                } catch {}
                 const now = Date.now();
                 const spacingOk = now - lastClickTime >= CLICK_COOLDOWN;
                 const underLimit = postData.retryCount < postData.maxRetries;
@@ -193,16 +246,23 @@ export const useGrokRetry = (postId: string | null) => {
 
                 if (!spacingOk || !underLimit || !permitted) return;
 
+                // Consume the retry permission immediately to prevent duplicate retries
+                save('canRetry', false);
+
                 // Increment retry count prior to attempting click
-                const nextCount = postData.retryCount + 1;
-                save('retryCount', nextCount);
+                            const nextCount = postData.retryCount + 1;
+                            save('retryCount', nextCount);
+                            (window as any).__grok_retryCount = nextCount;
                 appendLog(`Retry ${nextCount}/${postData.maxRetries}`, 'info');
                 // Attempt a retry with the last known prompt value
-                const attempted = clickMakeVideoButton(postData.lastPromptValue);
+                const attempted = clickMakeVideoButton(postData.lastPromptValue, { overridePermit: true });
                 if (!attempted) {
                     // If we failed to click due to selectors, keep scheduler alive and try again next tick
                     console.log('[Grok Retry] Scheduler tick: click attempt failed, will retry');
                     appendLog('Scheduler — click failed, will retry', 'warn');
+                    // Restore permission since we didn't actually click
+                    save('canRetry', true);
+                    (window as any).__grok_canRetry = true;
                 } else {
                     console.log('[Grok Retry] Scheduler tick: click attempted');
                     appendLog('Scheduler — click attempted', 'info');
@@ -215,12 +275,27 @@ export const useGrokRetry = (postId: string | null) => {
                 clearInterval(schedulerRef.current);
                 schedulerRef.current = null;
             }
+            try {
+                const w = window as any;
+                w.__grok_schedulerActive = false;
+            } catch {}
         };
-    }, [autoRetryEnabled, postData.isSessionActive, postData.retryCount, postData.maxRetries, postData.lastPromptValue, lastClickTime, isLoading, postId, clickMakeVideoButton]);
+    }, [
+        autoRetryEnabled,
+        postData.isSessionActive,
+        postData.retryCount,
+        postData.maxRetries,
+        postData.lastPromptValue,
+        postData.canRetry,
+        lastClickTime,
+        isLoading,
+        postId,
+        clickMakeVideoButton,
+    ]);
 
     return {
         // State
-        retryCount,
+        retryCount: postData.retryCount,
         maxRetries,
         autoRetryEnabled,
         lastPromptValue,
@@ -231,7 +306,7 @@ export const useGrokRetry = (postId: string | null) => {
         lastAttemptTime,
         logs: postData.logs || [],
         lastFailureTime,
-        canRetry,
+        canRetry: postData.canRetry,
         isLoading,
 
         // Actions
@@ -245,7 +320,6 @@ export const useGrokRetry = (postId: string | null) => {
         setVideoGoal,
         incrementVideosGenerated,
         resetVideosGenerated,
-        // helpers
-        markFailureDetected: () => saveAll({ lastFailureTime: Date.now(), canRetry: true }),
+        markFailureDetected,
     };
 };

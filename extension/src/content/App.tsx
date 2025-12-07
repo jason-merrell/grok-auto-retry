@@ -144,6 +144,9 @@ const ImaginePostApp: React.FC = () => {
 
 	// Auto-cancel interrupted sessions on mount (after refresh/navigation) - only once
 	useEffect(() => {
+		if ((window as any).__grok_test?.skipAutoCancel) {
+			return;
+		}
 		console.log(
 			"[Grok Retry] Auto-cancel effect - isLoading:",
 			retry.isLoading,
@@ -177,6 +180,9 @@ const ImaginePostApp: React.FC = () => {
 
 	// Fallback check - run once after a short delay to catch any race conditions
 	useEffect(() => {
+		if ((window as any).__grok_test?.skipAutoCancel) {
+			return;
+		}
 		const timeoutId = setTimeout(() => {
 			console.log(
 				"[Grok Retry] Fallback timeout - hasChecked:",

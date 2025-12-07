@@ -6,3 +6,5 @@ dist.**
 .DS_Store
 docs/eval**
 .scratch/**
+.env**
+.pw-user/

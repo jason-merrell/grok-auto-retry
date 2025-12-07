@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run integration tests",
+			"type": "shell",
+			"command": "npm run test:integration",
+			"args": [],
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}
