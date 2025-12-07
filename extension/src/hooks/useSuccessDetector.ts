@@ -1,17 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { selectors, isSuccessStateGenerateButton } from '../config/selectors';
+import { selectors, isSuccessStateGenerateButton, getButtonSelectors } from '../config/selectors';
 import { usePostId } from './usePostId';
 import { useGlobalSettings } from './useGlobalSettings';
 
 const VIDEO_SELECTOR = selectors.success.legacyVideo;
-
-// Default button selectors supporting multiple languages
-const DEFAULT_BUTTON_SELECTORS = [
-    'button[aria-label="Make video"]',     // English
-    'button[aria-label="Crear video"]',    // Spanish
-    'button[aria-label="Redo"]',           // English
-    'button[aria-label="Rehacer"]',        // Spanish
-];
 
 export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) => {
     const postId = usePostId();
@@ -20,9 +12,7 @@ export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) =>
     const lastSuccessAtRef = useRef<number>(0);
 
     // Use custom selector if provided, otherwise try all default multi-language selectors
-    const buttonSelectors = settings.customSelectors?.makeVideoButton 
-        ? [settings.customSelectors.makeVideoButton]
-        : DEFAULT_BUTTON_SELECTORS;
+    const buttonSelectors = getButtonSelectors(settings.customSelectors?.makeVideoButton);
 
     const checkVideoSuccess = useCallback(() => {
         if (!isEnabled) return;

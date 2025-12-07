@@ -1,18 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { usePostStorage } from './useSessionStorage';
 import { useGlobalSettings } from './useGlobalSettings';
+import { getButtonSelectors } from '../config/selectors';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
 const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
-
-// Default button selectors supporting multiple languages
-const DEFAULT_BUTTON_SELECTORS = [
-    'button[aria-label="Redo"]',           // English - retries after first generation
-    'button[aria-label="Rehacer"]',        // Spanish - retries after first generation
-    'button[aria-label="Make video"]',     // English - first generation
-    'button[aria-label="Crear video"]',    // Spanish - first generation
-];
-
 const TEXTAREA_SELECTOR = 'textarea[aria-label="Make a video"][placeholder="Type to customize video..."]';
 
 export const useGrokRetry = (postId: string | null) => {
@@ -24,9 +16,7 @@ export const useGrokRetry = (postId: string | null) => {
     const schedulerRef = useRef<number | null>(null);
     
     // Use custom selector if provided, otherwise use default multi-language selectors
-    const buttonSelectors = settings.customSelectors?.makeVideoButton 
-        ? [settings.customSelectors.makeVideoButton]
-        : DEFAULT_BUTTON_SELECTORS;
+    const buttonSelectors = getButtonSelectors(settings.customSelectors?.makeVideoButton);
 
     // Initialize original page title
     useEffect(() => {

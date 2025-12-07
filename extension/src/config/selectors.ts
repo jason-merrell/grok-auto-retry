@@ -52,6 +52,19 @@ export function getMetaContent(sel: string): string | null {
     return el?.getAttribute('content') ?? null;
 }
 
+// Default button selectors supporting multiple languages
+export const DEFAULT_BUTTON_SELECTORS = [
+    'button[aria-label="Redo"]',           // English - retries after first generation
+    'button[aria-label="Rehacer"]',        // Spanish - retries after first generation
+    'button[aria-label="Make video"]',     // English - first generation
+    'button[aria-label="Crear video"]',    // Spanish - first generation
+];
+
+// Helper to resolve button selectors (custom or default multi-language)
+export function getButtonSelectors(customSelector?: string): string[] {
+    return customSelector ? [customSelector] : DEFAULT_BUTTON_SELECTORS;
+}
+
 // Helper to determine if the generate button is in success state (icon-only or 'Redo' text)
 export function isSuccessStateGenerateButton(btn: HTMLButtonElement | null): boolean {
     if (!btn) return false;
