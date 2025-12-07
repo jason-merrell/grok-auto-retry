@@ -5,6 +5,7 @@ A TypeScript-based Chrome extension that automatically retries video generation 
 ## Features
 
 - ✅ Auto-retry on content moderation with configurable max retries
+- 🌍 Multi-language support - works with English, Spanish, and other localized Grok interfaces
 - 🎬 Video goal system - automatically generate multiple videos with 8-second delays
 - 🖼️ Image generation panel for `/imagine` routes with one-click generation
 - ⚙️ Global settings sheet - configure defaults, timing, UI preferences, and advanced options that sync across devices
@@ -141,6 +142,24 @@ export const MyFeature: React.FC<MyFeatureProps> = ({ onAction }) => {
 ```
 
 ## Configuration
+
+### Language Support
+
+The extension automatically detects and works with multiple languages:
+
+- **English**: "Make video", "Redo"
+- **Spanish**: "Crear video", "Rehacer"
+- **Custom languages**: Override button selectors in Global Settings → Advanced tab
+
+If you're using Grok in a different language and buttons aren't being detected:
+
+1. Click the gear icon to open Global Settings
+2. Go to the Advanced tab
+3. Find the "Custom CSS Selectors" section
+4. Enter the appropriate aria-label selector for your language (e.g., `button[aria-label="Your Button Text"]`)
+5. Reload the page to apply changes
+
+The extension will continue to work even if Grok changes its button selectors - just update the custom selector in settings.
 
 ### Prompt Partials
 
