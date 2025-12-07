@@ -13,6 +13,7 @@ import { usePostId } from "@/hooks/usePostId";
 import { ControlPanel } from "@/components/ControlPanel";
 import { MiniToggle } from "@/components/MiniToggle";
 import { ImaginePanel } from "@/components/ImaginePanel";
+import { GlobalSettingsDialog } from "@/components/GlobalSettingsDialog";
 
 const ImaginePostApp: React.FC = () => {
 	// Only show on /imagine/post/* routes
@@ -46,6 +47,7 @@ const ImaginePostApp: React.FC = () => {
 	const miniDrag = useMiniToggleDrag();
 	const [rapidFailureDetected, setRapidFailureDetected] = React.useState(false);
 	const [showDebug, setShowDebug] = React.useState(false);
+	const [settingsOpen, setSettingsOpen] = React.useState(false);
 	const nextVideoTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 	const hasCheckedInterruptedSession = React.useRef(false);
 
@@ -352,7 +354,9 @@ const ImaginePostApp: React.FC = () => {
 					logs={retry?.logs || []}
 					showDebug={showDebug}
 					setShowDebug={setShowDebug}
+					onSettingsClick={() => setSettingsOpen(true)}
 				/>
+				<GlobalSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 			</TooltipProvider>
 		</div>
 	);
@@ -365,6 +369,7 @@ const ImagineRootApp: React.FC = () => {
 	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
 	const initialStoredPrompt = uiPrefs.imaginePromptValue ?? "";
 	const [promptValue, setPromptValue] = React.useState(initialStoredPrompt);
+	const [settingsOpen, setSettingsOpen] = React.useState(false);
 	const lastStoredPromptRef = React.useRef(initialStoredPrompt);
 
 	useEffect(() => {
@@ -480,7 +485,9 @@ const ImagineRootApp: React.FC = () => {
 					onMinimize={() => saveUIPref("isMinimized", true)}
 					onMaximizeToggle={handleMaximizeToggle}
 					onGenerateImages={handleGenerateImages}
+					onSettingsClick={() => setSettingsOpen(true)}
 				/>
+				<GlobalSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 			</TooltipProvider>
 		</div>
 	);

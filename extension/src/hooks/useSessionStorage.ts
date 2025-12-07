@@ -22,39 +22,17 @@ interface SessionData {
 // Combined interface for external API
 export interface PostData extends PersistentData, SessionData { }
 
-const DEFAULT_PERSISTENT_DATA: PersistentData = {
-    maxRetries: 3,
-    autoRetryEnabled: true,
-    lastPromptValue: '',
-    videoGoal: 1,
-};
-
-const DEFAULT_SESSION_DATA: SessionData = {
-    retryCount: 0,
-    isSessionActive: false,
-    videosGenerated: 0,
-    lastAttemptTime: 0,
-    lastFailureTime: 0,
-    canRetry: false,
-    logs: [],
-};
-
-const DEFAULT_POST_DATA: PostData = {
-    ...DEFAULT_PERSISTENT_DATA,
-    ...DEFAULT_SESSION_DATA,
-};
-
 const PERSISTENT_STORAGE_PREFIX = 'grokRetryPost_';
 const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
+const GLOBAL_SETTINGS_KEY = 'grokRetry_globalSettings';
 
 export const usePostStorage = (postId: string | null) => {
-    const [data, setData] = useState<PostData>(DEFAULT_POST_DATA);
+    const [data, setData] = useState<PostData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     // Load from both chrome.storage.local (persistent) and sessionStorage (session) when postId changes
     useEffect(() => {
         if (!postId) {
-            setData(DEFAULT_POST_DATA);
             setIsLoading(false);
             return;
         }
@@ -62,9 +40,31 @@ export const usePostStorage = (postId: string | null) => {
         const persistentKey = `${PERSISTENT_STORAGE_PREFIX}${postId}`;
         const sessionKey = `${SESSION_STORAGE_PREFIX}${postId}`;
 
-        // Load persistent data from chrome.storage.local
-        chrome.storage.local.get([persistentKey], (result) => {
-            const persistentData = result[persistentKey] || DEFAULT_PERSISTENT_DATA;
+        // Load global settings first to use as defaults
+        chrome.storage.sync.get([GLOBAL_SETTINGS_KEY], (globalResult) => {
+            const globalSettings = globalResult[GLOBAL_SETTINGS_KEY] || {};
+            
+            // Create defaults from global settings
+            const DEFAULT_PERSISTENT_DATA: PersistentData = {
+                maxRetries: globalSettings.defaultMaxRetries ?? 3,
+                autoRetryEnabled: globalSettings.defaultAutoRetryEnabled ?? true,
+                lastPromptValue: '',
+                videoGoal: globalSettings.defaultVideoGoal ?? 1,
+            };
+
+            const DEFAULT_SESSION_DATA: SessionData = {
+                retryCount: 0,
+                isSessionActive: false,
+                videosGenerated: 0,
+                lastAttemptTime: 0,
+                lastFailureTime: 0,
+                canRetry: false,
+                logs: [],
+            };
+
+            // Load persistent data from chrome.storage.local
+            chrome.storage.local.get([persistentKey], (result) => {
+                const persistentData = result[persistentKey] || DEFAULT_PERSISTENT_DATA;
 
             // Load session data from sessionStorage
             let sessionData = DEFAULT_SESSION_DATA;
@@ -77,9 +77,10 @@ export const usePostStorage = (postId: string | null) => {
                 console.error('[Grok Retry] Failed to load session storage:', error);
             }
 
-            setData({ ...persistentData, ...sessionData });
-            console.log('[Grok Retry] Loaded state for post:', postId, { persistentData, sessionData });
-            setIsLoading(false);
+                setData({ ...persistentData, ...sessionData });
+                console.log('[Grok Retry] Loaded state for post:', postId, { persistentData, sessionData });
+                setIsLoading(false);
+            });
         });
     }, [postId]);
 
@@ -93,7 +94,7 @@ export const usePostStorage = (postId: string | null) => {
                 const stored = sessionStorage.getItem(sessionKey);
                 const existing = stored ? JSON.parse(stored) : {};
                 const logs = Array.isArray(existing.logs) ? existing.logs : [];
-                setData(prev => ({ ...prev, logs }));
+                setData(prev => prev ? { ...prev, logs } : null);
             } catch { }
         };
         window.addEventListener('grok:log', handler as EventListener);
@@ -121,7 +122,7 @@ export const usePostStorage = (postId: string | null) => {
         });
 
         // Update React state immediately
-        setData((prev) => ({ ...prev, ...updates }));
+        setData((prev) => prev ? { ...prev, ...updates } : null);
 
         // Save persistent data to chrome.storage.local
         if (Object.keys(persistentUpdates).length > 0) {
@@ -149,6 +150,21 @@ export const usePostStorage = (postId: string | null) => {
         }
     }, [postId]);
 
+    // Provide default data if not loaded yet
+    const postData = data || {
+        maxRetries: 3,
+        autoRetryEnabled: true,
+        lastPromptValue: '',
+        videoGoal: 1,
+        retryCount: 0,
+        isSessionActive: false,
+        videosGenerated: 0,
+        lastAttemptTime: 0,
+        lastFailureTime: 0,
+        canRetry: false,
+        logs: [],
+    };
+
     // Save a specific key
     const save = useCallback(<K extends keyof PostData>(
         key: K,
@@ -168,7 +184,7 @@ export const usePostStorage = (postId: string | null) => {
             const next = [...logs, `${new Date().toLocaleTimeString()} — ${level.toUpperCase()} — ${line}`].slice(-200);
             sessionStorage.setItem(sessionKey, JSON.stringify({ ...existing, logs: next }));
             // reflect in state
-            setData(prev => ({ ...prev, logs: next }));
+            setData(prev => prev ? { ...prev, logs: next } : null);
             // also dispatch event for live listeners
             try {
                 window.dispatchEvent(new CustomEvent('grok:log', { detail: { postId, line, level } }));
@@ -182,7 +198,7 @@ export const usePostStorage = (postId: string | null) => {
     const clear = useCallback(() => {
         if (!postId) return;
 
-        setData(DEFAULT_POST_DATA);
+        setData(postData);
 
         // Clear persistent storage
         const persistentKey = `${PERSISTENT_STORAGE_PREFIX}${postId}`;
@@ -202,7 +218,7 @@ export const usePostStorage = (postId: string | null) => {
         } catch (error) {
             console.error('[Grok Retry] Failed to clear session storage:', error);
         }
-    }, [postId]);
+    }, [postId, postData]);
 
-    return { data, save, saveAll: saveToPost, clear, isLoading, appendLog };
+    return { data: postData, save, saveAll: saveToPost, clear, isLoading, appendLog };
 };

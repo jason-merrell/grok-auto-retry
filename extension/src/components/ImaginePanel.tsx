@@ -20,6 +20,7 @@ interface ImaginePanelProps {
 	onMinimize: () => void;
 	onMaximizeToggle: () => void;
 	onGenerateImages: () => void;
+	onSettingsClick?: () => void;
 }
 
 export const ImaginePanel: React.FC<ImaginePanelProps> = ({
@@ -36,6 +37,7 @@ export const ImaginePanel: React.FC<ImaginePanelProps> = ({
 	onMinimize,
 	onMaximizeToggle,
 	onGenerateImages,
+	onSettingsClick,
 }) => {
 	return (
 		<Card
@@ -68,6 +70,7 @@ export const ImaginePanel: React.FC<ImaginePanelProps> = ({
 					isSessionActive={false}
 					onMinimize={onMinimize}
 					onMaximizeToggle={onMaximizeToggle}
+					onSettingsClick={onSettingsClick}
 				/>
 			</CardHeader>
 

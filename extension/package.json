@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "watch": "vite build --watch",
+    "build": "tsc && vite build --mode content",
+    "watch": "vite build --mode content --watch",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -15,6 +15,7 @@
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",

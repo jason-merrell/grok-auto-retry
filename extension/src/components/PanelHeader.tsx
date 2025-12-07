@@ -2,7 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Minimize2, Minimize, Fullscreen, Bug } from "lucide-react";
+import { Minimize2, Minimize, Fullscreen, Bug, Settings } from "lucide-react";
 
 interface PanelHeaderProps {
 	isMaximized: boolean;
@@ -11,6 +11,7 @@ interface PanelHeaderProps {
 	onMaximizeToggle: () => void;
 	onToggleDebug?: () => void;
 	isDebug?: boolean;
+	onSettingsClick?: () => void;
 }
 
 export const PanelHeader: React.FC<PanelHeaderProps> = ({
@@ -20,6 +21,7 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 	onMaximizeToggle,
 	onToggleDebug,
 	isDebug,
+	onSettingsClick,
 }) => {
 	return (
 		<div className="flex items-center justify-between">
@@ -40,6 +42,16 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 				)}
 			</div>
 			<div className="flex gap-1">
+				{onSettingsClick && (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onSettingsClick}>
+								<Settings className="h-4 w-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>Global Settings</TooltipContent>
+					</Tooltip>
+				)}
 				{onToggleDebug && (
 					<Tooltip>
 						<TooltipTrigger asChild>
