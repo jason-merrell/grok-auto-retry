@@ -78,7 +78,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for detailed installation instructions.
 4. Use prompt partials to quickly add common modifiers (Style, Lighting, Mood, etc.)
 5. Save prompts for reuse with the "Save" button
 6. Load previously saved prompts from the dropdown menu
-7. Click "Generate Video" to start - the system will automatically retry on moderation
+7. Click "Start Session" to start - the system will automatically retry on moderation
 8. Monitor progress in the browser tab title, dynamic status badges, and real-time debug logs
 
 ### Image Generation (`/imagine` route)

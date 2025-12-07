@@ -209,7 +209,7 @@ Storage Details:
 - Opening the same post in multiple tabs shares both persistent and session state
 - Different posts maintain completely independent state
 - Reopening a closed tab restores your preferences and prompt, but starts fresh session counters
-- **Interrupted Session Handling**: If you refresh the page during an active session, it will automatically cancel the interrupted session to prevent stuck states. You can click "Generate Video" to start a new session.
+- **Interrupted Session Handling**: If you refresh the page during an active session, it will automatically cancel the interrupted session to prevent stuck states. You can click "Start Session" to start a new session.
 
 **Global UI Preferences (Chrome Storage):**
 

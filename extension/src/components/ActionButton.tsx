@@ -21,7 +21,7 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ isSessionActive, onG
 	return (
 		<Button variant="default" size="sm" className="w-full" onClick={onGenerate}>
 			<Play className="h-4 w-4 mr-2" />
-			Generate Video
+			Start Session
 		</Button>
 	);
 };
