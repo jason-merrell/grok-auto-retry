@@ -237,7 +237,7 @@ export const useGrokRetry = (postId: string | null) => {
 
                 // Check for session timeout (no success/failure feedback for too long)
                 const timeSinceLastAttempt = now - postData.lastAttemptTime;
-                if (timeSinceLastAttempt > SESSION_TIMEOUT) {
+                if (postData.lastAttemptTime > 0 && timeSinceLastAttempt > SESSION_TIMEOUT) {
                     console.warn('[Grok Retry] Session timeout - no feedback for 2 minutes, ending session');
                     appendLog('Session timeout - ending (no success/failure feedback received)', 'warn');
                     endSession();

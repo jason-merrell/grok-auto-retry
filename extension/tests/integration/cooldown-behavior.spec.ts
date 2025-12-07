@@ -22,7 +22,19 @@ test('scheduler respects cooldown timing', async ({ page }) => {
     const w = window as any;
     w.__grok_test = w.__grok_test || {};
     w.__grok_test.skipAutoCancel = true;
-    const makeStorageArea = () => {
+    const listeners: Record<string, Array<(...args: any[]) => void>> = {};
+    const acquire = (key: string) => {
+      listeners[key] = listeners[key] || [];
+      return listeners[key];
+    };
+    const emit = (key: string, ...args: any[]) => {
+      acquire(key).forEach((handler) => {
+        try {
+          handler(...args);
+        } catch {}
+      });
+    };
+    const makeStorageArea = (areaName: 'local' | 'sync') => {
       const store: Record<string, any> = {};
       return {
         get(keys: string[] | string, callback: (items: Record<string, any>) => void) {
@@ -34,29 +46,77 @@ test('scheduler respects cooldown timing', async ({ page }) => {
           callback(result);
         },
         set(items: Record<string, any>, callback?: () => void) {
-          Object.assign(store, items);
+          const changes: Record<string, { oldValue: any; newValue: any }> = {};
+          Object.entries(items).forEach(([key, value]) => {
+            const oldValue = store[key];
+            store[key] = value;
+            changes[key] = { oldValue, newValue: value };
+          });
           callback?.();
+          if (Object.keys(changes).length > 0) {
+            emit('storage.onChanged', changes, areaName);
+          }
         },
         remove(keys: string[] | string, callback?: () => void) {
           const keyArray = Array.isArray(keys) ? keys : [keys];
-          keyArray.forEach((key) => { delete store[key]; });
+          const changes: Record<string, { oldValue: any; newValue: any }> = {};
+          keyArray.forEach((key) => {
+            if (key in store) {
+              changes[key] = { oldValue: store[key], newValue: undefined };
+              delete store[key];
+            }
+          });
           callback?.();
+          if (Object.keys(changes).length > 0) {
+            emit('storage.onChanged', changes, areaName);
+          }
+        },
+        clear(callback?: () => void) {
+          const keys = Object.keys(store);
+          const changes: Record<string, { oldValue: any; newValue: any }> = {};
+          keys.forEach((key) => {
+            changes[key] = { oldValue: store[key], newValue: undefined };
+            delete store[key];
+          });
+          callback?.();
+          if (Object.keys(changes).length > 0) {
+            emit('storage.onChanged', changes, areaName);
+          }
         },
       };
     };
-    const storageArea = makeStorageArea();
+    const storageLocal = makeStorageArea('local');
+    const storageSync = makeStorageArea('sync');
     (window as any).chrome = {
       storage: {
-        local: storageArea,
-        sync: makeStorageArea(),
+        local: storageLocal,
+        sync: storageSync,
+        onChanged: {
+          addListener: (handler: (...args: any[]) => void) => {
+            acquire('storage.onChanged').push(handler);
+          },
+          removeListener: (handler: (...args: any[]) => void) => {
+            const list = acquire('storage.onChanged');
+            const idx = list.indexOf(handler);
+            if (idx >= 0) list.splice(idx, 1);
+          },
+        },
       },
       runtime: {
         lastError: null,
         onMessage: {
-          addListener: () => {},
-          removeListener: () => {},
+          addListener: (handler: (...args: any[]) => void) => {
+            acquire('runtime.onMessage').push(handler);
+          },
+          removeListener: (handler: (...args: any[]) => void) => {
+            const list = acquire('runtime.onMessage');
+            const idx = list.indexOf(handler);
+            if (idx >= 0) list.splice(idx, 1);
+          },
         },
-        sendMessage: () => {},
+        sendMessage: (_message: any, responseCallback?: (response?: any) => void) => {
+          emit('runtime.onMessage', _message, {}, responseCallback || (() => {}));
+        },
       },
     };
   });

@@ -1,10 +1,13 @@
 node_modules/
 dist/
 dist.**
-*.log
+**/coverage/
+**/test-results/
+**/.pw-user/
 *.log
 .DS_Store
 docs/eval**
 .scratch/**
 .env**
-.pw-user/
+*.crx
+*.pem
