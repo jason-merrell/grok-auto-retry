@@ -41,6 +41,7 @@ interface ControlPanelProps {
 	logs?: string[];
 	showDebug: boolean;
 	setShowDebug: (value: boolean) => void;
+	onSettingsClick?: () => void;
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -72,6 +73,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 	logs = [],
 	showDebug,
 	setShowDebug,
+	onSettingsClick,
 }) => {
 	const logsContainerRef = React.useRef<HTMLDivElement>(null);
 	const [isUserScrolledUp, setIsUserScrolledUp] = React.useState(false);
@@ -125,6 +127,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 					onMaximizeToggle={onMaximizeToggle}
 					onToggleDebug={() => setShowDebug(!showDebug)}
 					isDebug={showDebug}
+					onSettingsClick={onSettingsClick}
 				/>
 			</CardHeader>
 

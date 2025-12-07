@@ -7,6 +7,7 @@ A TypeScript-based Chrome extension that automatically retries video generation 
 - ✅ Auto-retry on content moderation with configurable max retries
 - 🎬 Video goal system - automatically generate multiple videos with 8-second delays
 - 🖼️ Image generation panel for `/imagine` routes with one-click generation
+- ⚙️ Global settings sheet - configure defaults, timing, UI preferences, and advanced options that sync across devices
 - 💾 Saved prompts - save, load, rename, and manage your favorite prompts globally
 - 📝 Prompt preservation and quick-add prompt partials with categories
 - 🔄 Real-time progress in browser tab title with completion status
@@ -98,6 +99,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for detailed installation instructions.
 - **Prompt Partials**: Quick-add categorized prompt modifiers with descriptions
 - **Save/Load**: Manage globally saved prompts with rename and delete options
 - **Import/Export**: Import or export prompt text files
+- **Settings**: Open global settings sheet (gear icon) to configure defaults, timing, UI preferences, and advanced options
 
 ## Contributing
 

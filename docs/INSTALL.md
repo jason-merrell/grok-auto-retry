@@ -56,6 +56,47 @@ The extension provides different functionality based on the current route:
 - **Real-time Sync**: Changes automatically sync across all tabs
 - **Persistent Storage**: Saved to Chrome storage, survives browser restarts
 
+### Global Settings
+
+Access via the gear icon in panel header. Opens a settings sheet with four tabs:
+
+**Defaults Tab:**
+
+- Default max retries (1-50, default: 3)
+- Default video goal (1-50, default: 1)
+- Enable auto-retry by default (toggle)
+- Settings automatically apply to new video generation sessions
+
+**Timing Tab:**
+
+- Retry click cooldown (1-60 seconds, default: 8s)
+- Video generation delay between successful videos (1-60 seconds, default: 8s)
+- Rate limit wait time (30-300 seconds, default: 60s)
+- Rapid failure threshold for warnings (1-30 seconds, default: 6s)
+
+**UI Tab:**
+
+- Default panel width (260-800px, default: 320px)
+- Default panel height (100-800px, default: 400px)
+- Start panel minimized (toggle)
+
+**Advanced Tab:**
+
+- Show rapid failure warning (toggle)
+- Auto-switch to debug panel on session start (toggle)
+- Custom CSS selectors for language/selector changes (advanced users)
+  - Override selectors for: notification section, make video button, video element, prompt textarea
+  - Requires page reload to apply changes
+- Import/Export settings as JSON for backup/restore
+- Reset all settings to defaults
+
+**Features:**
+
+- Number fields save on blur to prevent input wonkiness
+- Live badges show current values
+- Real-time save feedback with 2-second status messages
+- All settings sync across your devices via Chrome sync storage
+
 ### Auto-Retry System
 
 - Automatically detects "Content Moderated" messages and retries

@@ -1,3 +1,21 @@
+// Custom selectors will be loaded asynchronously, but we provide sync defaults
+let customSelectors: {
+    notificationSection?: string;
+    makeVideoButton?: string;
+    videoElement?: string;
+    promptTextarea?: string;
+} = {};
+
+// Load custom selectors from chrome.storage.sync
+if (typeof chrome !== 'undefined' && chrome.storage) {
+    chrome.storage.sync.get('grokRetry_globalSettings', (result) => {
+        if (result.grokRetry_globalSettings?.customSelectors) {
+            customSelectors = result.grokRetry_globalSettings.customSelectors;
+            console.log('[Selectors] Loaded custom selectors:', customSelectors);
+        }
+    });
+}
+
 export const selectors = {
     pageType: {
         imaginePost: 'link[rel="canonical"][href*="/imagine/post/"]',
@@ -6,18 +24,18 @@ export const selectors = {
         main: 'main',
     },
     notifications: {
-        section: 'section[aria-label*="Notifications"][aria-live="polite"]',
+        section: customSelectors.notificationSection || 'section[aria-label*="Notifications"][aria-live="polite"]',
         toast: 'section[aria-label*="Notifications"] li.toast',
         moderationToastText: 'section[aria-label*="Notifications"] li.toast[data-type="error"] :is(span, div)',
     },
     success: {
         imageTag: 'main img[src*="imagine-public.x.ai"], main img[src*="/imagine/post/"]',
         ogImageMeta: 'meta[property="og:image"], meta[name="twitter:image"]',
-        legacyVideo: 'video[id="sd-video"]',
-        iconOnlyGenerateButton: 'button[aria-label="Make video"]',
+        legacyVideo: customSelectors.videoElement || 'video[id="sd-video"]',
+        iconOnlyGenerateButton: customSelectors.makeVideoButton || 'button[aria-label="Make video"]',
     },
     prompt: {
-        textarea: 'textarea[name*="prompt"], [contenteditable="true"]',
+        textarea: customSelectors.promptTextarea || 'textarea[name*="prompt"], [contenteditable="true"]',
     },
 } as const;
 
