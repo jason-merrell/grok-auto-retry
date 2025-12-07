@@ -21,7 +21,7 @@ export const usePageTitle = (
             document.title = `✅ ${videosGenerated}/${videoGoal} Complete - ${originalTitle}`;
         } else if (isRateLimited) {
             document.title = `⏳ Rate Limited - ${originalTitle}`;
-        } else if (retryCount >= maxRetries) {
+        } else if (retryCount > maxRetries) {
             document.title = `❌ ${originalTitle}`;
         } else if (videoGoal > 1) {
             // Show video progress when videoGoal is set
