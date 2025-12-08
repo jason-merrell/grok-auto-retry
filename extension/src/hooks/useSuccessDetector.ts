@@ -2,8 +2,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { selectors, isSuccessStateGenerateButton } from '../config/selectors';
 import { usePostId } from './usePostId';
 
-const VIDEO_SELECTOR = selectors.success.legacyVideo;
-
 export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) => {
     const postId = usePostId();
     const [lastVideoSrc, setLastVideoSrc] = useState<string | null>(null);
@@ -23,7 +21,7 @@ export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) =>
         const buttonInSuccessState = isSuccessStateGenerateButton(genBtn);
 
         // Condition B: video src changed since baseline
-        const video = document.querySelector<HTMLVideoElement>(VIDEO_SELECTOR);
+        const video = document.querySelector<HTMLVideoElement>(selectors.success.legacyVideo);
         let videoChanged = false;
         if (video && video.src) {
             if (lastVideoSrc === null) {
@@ -74,7 +72,7 @@ export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) =>
             checkVideoSuccess();
         });
 
-        const video = document.querySelector(VIDEO_SELECTOR);
+        const video = document.querySelector(selectors.success.legacyVideo);
         if (video) {
             observer.observe(video, {
                 attributes: true,
@@ -89,7 +87,7 @@ export const useSuccessDetector = (onSuccess: () => void, isEnabled: boolean) =>
                 checkVideoSuccess();
                 return;
             }
-            const video = document.querySelector(VIDEO_SELECTOR);
+            const video = document.querySelector(selectors.success.legacyVideo);
             if (video && !observer.takeRecords().length) {
                 observer.observe(video, {
                     attributes: true,

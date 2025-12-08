@@ -1,26 +1,26 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { getGenerateButtonSelectors, getPromptSelectorCandidates } from '../config/selectors';
+import { findPromptInput, writePromptValue } from '../lib/promptInput';
 import { usePostStorage } from './useSessionStorage';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
 const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
-const BUTTON_SELECTORS = [
-    'button[aria-label="Redo"]',      // For retries after first generation
-    'button[aria-label="Make video"]' // For first generation
-];
-const TEXTAREA_SELECTOR = 'textarea[aria-label="Make a video"][placeholder="Type to customize video..."]';
 const PROGRESS_BUTTON_SELECTOR = 'button[aria-label="Video Options"]';
 const MAX_PROGRESS_RECORDS = 25;
+
 
 type ModerationLayer = {
     label: string;
     explanation: string;
+    layer: 1 | 2 | 3 | null;
 };
 
 const describeModerationLayer = (percent: number | null): ModerationLayer => {
     if (percent === null) {
         return {
             label: 'Security layer unknown',
-            explanation: 'Insufficient telemetry captured to infer which moderation stage fired.'
+            explanation: 'Insufficient telemetry captured to infer which moderation stage fired.',
+            layer: null,
         };
     }
 
@@ -29,20 +29,23 @@ const describeModerationLayer = (percent: number | null): ModerationLayer => {
     if (percent >= 88) {
         return {
             label: 'Security Layer 3: POST-GENERATION VALIDATION',
-            explanation: ' '
+            explanation: 'Rendered video blocked during post-generation validation checks.',
+            layer: 3,
         };
     }
 
     if (percent >= 25) {
         return {
             label: 'Security Layer 2: MODEL-LEVEL ALIGNMENT',
-            explanation: ' '
+            explanation: 'Model-level alignment guardrails refused the generation mid-stream.',
+            layer: 2,
         };
     }
 
     return {
         label: 'Security Layer 1: PROMPT FILTERING',
-        explanation: ' '
+        explanation: 'Prompt filtering stopped the attempt before generation began.',
+        layer: 1,
     };
 };
 
@@ -78,6 +81,10 @@ export const useGrokRetry = (postId: string | null) => {
     const videosGenerated = postData.videosGenerated;
     const lastAttemptTime = postData.lastAttemptTime;
     const lastFailureTime = postData.lastFailureTime;
+    const creditsUsed = postData.creditsUsed ?? 0;
+    const layer1Failures = postData.layer1Failures ?? 0;
+    const layer2Failures = postData.layer2Failures ?? 0;
+    const layer3Failures = postData.layer3Failures ?? 0;
 
     try {
         const w = window as any;
@@ -120,12 +127,15 @@ export const useGrokRetry = (postId: string | null) => {
 
     const incrementVideosGenerated = useCallback(() => {
         resetProgressTracking();
-        save('videosGenerated', videosGenerated + 1);
-    }, [resetProgressTracking, save, videosGenerated]);
+        saveAll({
+            videosGenerated: videosGenerated + 1,
+            creditsUsed: creditsUsed + 1,
+        });
+    }, [resetProgressTracking, saveAll, videosGenerated, creditsUsed]);
 
     const resetVideosGenerated = useCallback(() => {
-        save('videosGenerated', 0);
-    }, [save]);
+        saveAll({ videosGenerated: 0 });
+    }, [saveAll]);
 
     const beginProgressTracking = useCallback(() => {
         lastObservedProgressRef.current = null;
@@ -159,15 +169,31 @@ export const useGrokRetry = (postId: string | null) => {
     const startSession = useCallback(() => {
         resetProgressTracking();
         // Clear logs and attempt history at the start of a new session for this post
-        saveAll({ isSessionActive: true, retryCount: 0, videosGenerated: 0, logs: [], attemptProgress: [] });
+        saveAll({
+            isSessionActive: true,
+            retryCount: 0,
+            videosGenerated: 0,
+            logs: [],
+            attemptProgress: [],
+            creditsUsed: 0,
+            layer1Failures: 0,
+            layer2Failures: 0,
+            layer3Failures: 0,
+        });
     }, [resetProgressTracking, saveAll]);
 
     const endSession = useCallback(() => {
         resetProgressTracking();
-        save('isSessionActive', false);
-        save('retryCount', 0);
-        save('videosGenerated', 0);
-    }, [resetProgressTracking, save]);
+        saveAll({
+            isSessionActive: false,
+            retryCount: 0,
+            videosGenerated: 0,
+            creditsUsed: 0,
+            layer1Failures: 0,
+            layer2Failures: 0,
+            layer3Failures: 0,
+        });
+    }, [resetProgressTracking, saveAll]);
 
     const markFailureDetected = useCallback(() => {
         const now = Date.now();
@@ -184,11 +210,20 @@ export const useGrokRetry = (postId: string | null) => {
 
         const attemptIndex = Math.max(0, postData.retryCount);
         const percentLabel = progressPercent !== null ? `${progressPercent}%` : 'unknown progress';
-        const { label: moderationLayer, explanation: layerExplanation } = describeModerationLayer(progressPercent);
+        const { label: moderationLayer, explanation: layerExplanation, layer } = describeModerationLayer(progressPercent);
         appendLog(
             `Attempt ${attemptIndex} failed at ${percentLabel} — assumed ${moderationLayer}. ${layerExplanation}`,
             'warn'
         );
+
+        if (layer === 1) {
+            updates.layer1Failures = layer1Failures + 1;
+        } else if (layer === 2) {
+            updates.layer2Failures = layer2Failures + 1;
+        } else if (layer === 3) {
+            updates.layer3Failures = layer3Failures + 1;
+            updates.creditsUsed = creditsUsed + 1;
+        }
 
         if (progressPercent !== null) {
             const entries = Array.isArray(postData.attemptProgress) ? postData.attemptProgress : [];
@@ -201,7 +236,18 @@ export const useGrokRetry = (postId: string | null) => {
 
         saveAll(updates);
         resetProgressTracking();
-    }, [lastClickTime, saveAll, appendLog, postData.retryCount, postData.attemptProgress, resetProgressTracking]);
+    }, [
+        lastClickTime,
+        saveAll,
+        appendLog,
+        postData.retryCount,
+        postData.attemptProgress,
+        resetProgressTracking,
+        layer1Failures,
+        layer2Failures,
+        layer3Failures,
+        creditsUsed,
+    ]);
 
     useEffect(() => {
         try {
@@ -218,6 +264,10 @@ export const useGrokRetry = (postId: string | null) => {
     // Click the "Make video" button with React-style value setting
     const clickMakeVideoButton = useCallback((promptValue?: string, options?: { overridePermit?: boolean }) => {
         const now = Date.now();
+        if (postData.videoGoal > 0 && postData.videosGenerated >= postData.videoGoal) {
+            appendLog(`Video goal reached — skipping attempt (${postData.videosGenerated}/${postData.videoGoal})`, 'info');
+            return false;
+        }
         const timeUntilReady = lastClickTime + CLICK_COOLDOWN - now;
 
         if (timeUntilReady > 0) {
@@ -242,43 +292,41 @@ export const useGrokRetry = (postId: string | null) => {
             return false;
         }
 
-        // Try to find the button using either selector
+        const buttonSelectors = getGenerateButtonSelectors();
         let button: HTMLButtonElement | null = null;
-        for (const selector of BUTTON_SELECTORS) {
-            button = document.querySelector<HTMLButtonElement>(selector);
-            if (button) {
+        for (const selector of buttonSelectors) {
+            const candidate = document.querySelector<HTMLButtonElement>(selector);
+            if (candidate) {
+                button = candidate;
                 console.log('[Grok Retry] Found button with selector:', selector);
                 break;
             }
         }
 
         if (!button) {
-            console.log('[Grok Retry] Button not found with any selector:', BUTTON_SELECTORS.join(' | '));
+            console.log('[Grok Retry] Button not found with selectors:', buttonSelectors.join(' | '));
             appendLog('Button not found — selectors failed', 'warn');
             return false;
         }
 
-        // Always restore the prompt value to the textarea before clicking
-        const textarea = document.querySelector<HTMLTextAreaElement>(TEXTAREA_SELECTOR);
-        if (!textarea) {
-            console.log('[Grok Retry] Textarea not found:', TEXTAREA_SELECTOR);
-            appendLog('Textarea not found — selector failed', 'error');
+        const promptSelectors = getPromptSelectorCandidates();
+        const promptEntry = findPromptInput();
+
+        if (!promptEntry) {
+            console.log('[Grok Retry] Prompt input not found. Selectors tried:', promptSelectors.join(' | '));
+            appendLog('Prompt input not found — selector failed', 'error');
             return false;
         }
-        // Fallback to last known prompt value from storage when explicit value not provided
+
         const valueToSet = typeof promptValue === 'string' && promptValue.length > 0 ? promptValue : postData.lastPromptValue;
         if (valueToSet) {
-            // React-style value setting to ensure React detects the change
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLTextAreaElement.prototype,
-                'value'
-            )?.set;
-
-            if (nativeInputValueSetter) {
-                nativeInputValueSetter.call(textarea, valueToSet);
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                console.log('[Grok Retry] Restored prompt to textarea:', valueToSet.substring(0, 50) + '...');
-                appendLog('Restored prompt to site textarea', 'info');
+            const restored = writePromptValue(promptEntry.element, valueToSet);
+            if (restored) {
+                console.log('[Grok Retry] Restored prompt to input:', valueToSet.substring(0, 50) + '...');
+                appendLog('Restored prompt to site input', 'info');
+            } else {
+                console.log('[Grok Retry] Failed to restore prompt using target element');
+                appendLog('Failed to restore prompt into detected input', 'warn');
             }
         } else {
             console.log('[Grok Retry] Warning: No prompt value to restore!');
@@ -307,7 +355,17 @@ export const useGrokRetry = (postId: string | null) => {
         beginProgressTracking();
 
         return true;
-    }, [lastClickTime, save, postData.canRetry, postData.lastPromptValue, postId, appendLog, beginProgressTracking]);
+    }, [
+        lastClickTime,
+        save,
+        postData.canRetry,
+        postData.lastPromptValue,
+        postData.videoGoal,
+        postData.videosGenerated,
+        postId,
+        appendLog,
+        beginProgressTracking,
+    ]);
 
     // Lightweight scheduler to avoid getting stuck between detector callbacks
     useEffect(() => {
@@ -347,6 +405,13 @@ export const useGrokRetry = (postId: string | null) => {
                 const spacingOk = now - lastClickTime >= CLICK_COOLDOWN;
                 const underLimit = postData.retryCount < postData.maxRetries;
                 const permitted = postData.canRetry === true;
+                const goalReached = postData.videoGoal > 0 && postData.videosGenerated >= postData.videoGoal;
+
+                if (goalReached) {
+                    appendLog(`Video goal reached — ending session (${postData.videosGenerated}/${postData.videoGoal})`, 'info');
+                    endSession();
+                    return;
+                }
 
                 // Check for session timeout (no success/failure feedback for too long)
                 const timeSinceLastAttempt = now - postData.lastAttemptTime;
@@ -400,10 +465,14 @@ export const useGrokRetry = (postId: string | null) => {
         postData.maxRetries,
         postData.lastPromptValue,
         postData.canRetry,
+        postData.videoGoal,
+        postData.videosGenerated,
         lastClickTime,
         isLoading,
         postId,
         clickMakeVideoButton,
+        appendLog,
+        endSession,
     ]);
 
     useEffect(() => {
@@ -427,6 +496,10 @@ export const useGrokRetry = (postId: string | null) => {
         lastFailureTime,
         canRetry: postData.canRetry,
         attemptProgress: postData.attemptProgress,
+        creditsUsed,
+        layer1Failures,
+        layer2Failures,
+        layer3Failures,
         isLoading,
 
         // Actions
@@ -455,6 +528,10 @@ export const useGrokRetry = (postId: string | null) => {
         lastFailureTime,
         postData.canRetry,
         postData.attemptProgress,
+        creditsUsed,
+        layer1Failures,
+        layer2Failures,
+        layer3Failures,
         isLoading,
         setMaxRetries,
         setAutoRetryEnabled,

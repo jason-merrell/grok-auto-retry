@@ -26,6 +26,10 @@ interface SessionData {
     canRetry: boolean;
     logs?: string[];
     attemptProgress: AttemptProgressEntry[];
+    creditsUsed: number;
+    layer1Failures: number;
+    layer2Failures: number;
+    layer3Failures: number;
 }
 
 // Combined interface for external API
@@ -36,6 +40,8 @@ const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
 const GLOBAL_SETTINGS_KEY = 'grokRetry_globalSettings';
 const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal'];
 const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs', 'attemptProgress'];
+const SESSION_COUNTER_KEYS: (keyof SessionData)[] = ['creditsUsed', 'layer1Failures', 'layer2Failures', 'layer3Failures'];
+const ALL_SESSION_KEYS: (keyof SessionData)[] = [...SESSION_KEYS, ...SESSION_COUNTER_KEYS];
 
 const createDefaultPostData = (): PostData => ({
     maxRetries: 3,
@@ -50,6 +56,10 @@ const createDefaultPostData = (): PostData => ({
     canRetry: false,
     logs: [],
     attemptProgress: [],
+    creditsUsed: 0,
+    layer1Failures: 0,
+    layer2Failures: 0,
+    layer3Failures: 0,
 });
 
 export const usePostStorage = (postId: string | null) => {
@@ -97,6 +107,10 @@ export const usePostStorage = (postId: string | null) => {
                 canRetry: false,
                 logs: [],
                 attemptProgress: [],
+                creditsUsed: 0,
+                layer1Failures: 0,
+                layer2Failures: 0,
+                layer3Failures: 0,
             };
 
             // Load persistent data from chrome.storage.local
@@ -165,7 +179,7 @@ export const usePostStorage = (postId: string | null) => {
             if (PERSISTENT_KEYS.includes(key as keyof PersistentData)) {
                 (persistentUpdates as any)[key] = updates[key as keyof PostData];
             }
-            if (SESSION_KEYS.includes(key as keyof SessionData)) {
+            if (ALL_SESSION_KEYS.includes(key as keyof SessionData)) {
                 (sessionUpdates as any)[key] = updates[key as keyof PostData];
             }
         });

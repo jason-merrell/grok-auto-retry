@@ -26,6 +26,7 @@ const createClock = (): Clock => {
 
 describe('usePromptCapture', () => {
     beforeEach(() => {
+        window.chrome.storage.sync.set({ grokRetry_globalSettings: undefined });
         document.body.innerHTML = '';
     });
 
@@ -68,6 +69,34 @@ describe('usePromptCapture', () => {
         expect(third).toBe('Updated prompt after cooldown');
 
         clock.restore();
+    });
+
+    it('uses custom prompt selector overrides', () => {
+        window.chrome.storage.sync.set({
+            grokRetry_globalSettings: {
+                customSelectors: {
+                    promptTextarea: 'textarea[aria-label="Crear un video"]',
+                },
+            },
+        });
+
+        const textarea = document.createElement('textarea');
+        textarea.setAttribute('aria-label', 'Crear un video');
+        textarea.value = 'Prompt en español';
+        document.body.appendChild(textarea);
+
+        const { result } = renderHook(() => usePromptCapture());
+
+        let captured: string | null = null;
+        act(() => {
+            captured = result.current.capturePromptFromSite();
+        });
+        expect(captured).toBe('Prompt en español');
+
+        textarea.value = '';
+        const success = result.current.copyPromptToSite('Contenido actualizado');
+        expect(success).toBe(true);
+        expect(textarea.value).toBe('Contenido actualizado');
     });
 
     it('captures prompt text from the ProseMirror editor when textarea missing', () => {
