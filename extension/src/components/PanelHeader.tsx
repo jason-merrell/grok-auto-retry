@@ -42,16 +42,6 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 				)}
 			</div>
 			<div className="flex gap-1">
-				{onSettingsClick && (
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onSettingsClick}>
-								<Settings className="h-4 w-4" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent>Global Settings</TooltipContent>
-					</Tooltip>
-				)}
 				{onToggleDebug && (
 					<Tooltip>
 						<TooltipTrigger asChild>
@@ -83,6 +73,16 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent>Minimize</TooltipContent>
+					</Tooltip>
+				)}
+				{onSettingsClick && (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onSettingsClick}>
+								<Settings className="h-4 w-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>Global Settings</TooltipContent>
 					</Tooltip>
 				)}
 			</div>

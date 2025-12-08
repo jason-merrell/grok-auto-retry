@@ -198,20 +198,17 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 				</CardHeader>
 
 				<CardContent
-					ref={logsContainerRef}
-					className="space-y-3 overflow-auto flex-1"
+					className="flex flex-1 flex-col space-y-3 overflow-hidden"
 					style={isMaximized ? {} : { maxHeight: `${height - 140}px` }}
-					onScroll={handleScroll}
 				>
 					{showDebug ? (
-						<div className="font-mono text-xs whitespace-pre-wrap break-words">
-							<div className="flex items-center justify-between mb-2">
+						<div className="flex h-full flex-col gap-2">
+							<div className="flex items-center justify-between">
 								<div className="flex items-center gap-2">
 									<p className="text-sm font-semibold">Session Logs</p>
 									{isMaximized && isSessionActive && (
 										<>
 											{(() => {
-												// Retry badge color logic (same as RetryStats)
 												const retryPercentage = maxRetries > 0 ? (retryCount / maxRetries) * 100 : 0;
 												let retryClassName = "h-5 px-1.5 text-[10px] ";
 												if (retryPercentage === 0) {
@@ -234,7 +231,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 												);
 											})()}
 											{(() => {
-												// Video badge color logic (same as RetryStats)
 												let videoClassName = "h-5 px-1.5 text-[10px] ";
 												if (videosGenerated === 0) {
 													videoClassName +=
@@ -256,7 +252,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 									)}
 								</div>
 								<Button
-									variant="outline"
+									variant="ghost"
 									size="sm"
 									onClick={() => {
 										try {
@@ -271,55 +267,61 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 									Copy Logs
 								</Button>
 							</div>
-							{logs && logs.length ? (
-								<ul className="space-y-1">
-									{logs.map((line, i) => {
-										const isWarn = line.includes(" — WARN — ");
-										const isError = line.includes(" — ERROR — ");
-										const isSuccess = line.includes(" — SUCCESS — ");
-										const cls = isError
-											? "text-red-500"
-											: isWarn
-											? "text-yellow-500"
-											: isSuccess
-											? "text-green-500"
-											: "text-muted-foreground";
+							<div
+								ref={logsContainerRef}
+								onScroll={handleScroll}
+								className="font-mono text-xs whitespace-pre-wrap break-words flex-1 overflow-auto rounded-md border border-border bg-muted/40 p-2"
+							>
+								{logs && logs.length ? (
+									<ul className="space-y-1">
+										{logs.map((line, i) => {
+											const isWarn = line.includes(" — WARN — ");
+											const isError = line.includes(" — ERROR — ");
+											const isSuccess = line.includes(" — SUCCESS — ");
+											const cls = isError
+												? "text-red-500"
+												: isWarn
+												? "text-yellow-500"
+												: isSuccess
+												? "text-green-500"
+												: "text-muted-foreground";
 
-										const rawLayerMatch =
-											line.match(/assumed (Security Layer [^.]+?)(?:\.|$)/i) ??
-											line.match(/assumed (Layer [^.]+?)(?:\.|$)/i);
-										const layerKey = rawLayerMatch
-											? (() => {
-													const normalized = rawLayerMatch[1].trim().toUpperCase();
-													return normalized.startsWith("SECURITY ")
-														? normalized
-														: `SECURITY ${normalized}`;
-											  })()
-											: null;
-										const layerDetails = layerKey ? MODERATION_LAYER_DETAILS[layerKey] : undefined;
+											const rawLayerMatch =
+												line.match(/assumed (Security Layer [^.]+?)(?:\.|$)/i) ??
+												line.match(/assumed (Layer [^.]+?)(?:\.|$)/i);
+											const layerKey = rawLayerMatch
+												? (() => {
+														const normalized = rawLayerMatch[1].trim().toUpperCase();
+														return normalized.startsWith("SECURITY ")
+															? normalized
+															: `SECURITY ${normalized}`;
+												  })()
+												: null;
+											const layerDetails = layerKey ? MODERATION_LAYER_DETAILS[layerKey] : undefined;
 
-										return (
-											<li key={i} className={`${cls} flex flex-col gap-0.5`}>
-												<span>{line}</span>
-												{layerDetails && (
-													<button
-														type="button"
-														className="text-xs text-muted-foreground underline underline-offset-2 hover:text-primary/80 w-full text-left"
-														onClick={() => setActiveLayerKey(layerKey)}
-													>
-														[Learn more about {layerDetails.shortName}]
-													</button>
-												)}
-											</li>
-										);
-									})}
-								</ul>
-							) : (
-								<p className="text-muted-foreground">No logs yet for this session.</p>
-							)}
+											return (
+												<li key={i} className={`${cls} flex flex-col gap-0.5`}>
+													<span>{line}</span>
+													{layerDetails && (
+														<button
+															type="button"
+															className="text-xs text-muted-foreground underline underline-offset-2 hover:text-primary/80 w-full text-left"
+															onClick={() => setActiveLayerKey(layerKey)}
+														>
+															[Learn more about {layerDetails.shortName}]
+														</button>
+													)}
+												</li>
+											);
+										})}
+									</ul>
+								) : (
+									<p className="text-muted-foreground">No logs yet for this session.</p>
+								)}
+							</div>
 						</div>
 					) : (
-						<>
+						<div className="flex-1 space-y-3 overflow-auto pr-1">
 							<RetryControls autoRetryEnabled={autoRetryEnabled} onAutoRetryChange={onAutoRetryChange} />
 
 							<RetryStats
@@ -355,7 +357,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 							/>
 
 							<PromptPartials onAppendPartial={onPromptAppend} disabled={!autoRetryEnabled} />
-						</>
+						</div>
 					)}
 				</CardContent>
 

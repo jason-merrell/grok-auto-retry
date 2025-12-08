@@ -9,7 +9,7 @@ const DEFAULT_NOTIFICATION_SECTION = 'section[aria-label*="Notifications"][aria-
 const DEFAULT_NOTIFICATION_BASE = 'section[aria-label*="Notifications"]';
 const DEFAULT_MAKE_VIDEO_BUTTON = 'button[aria-label="Make video"]';
 const DEFAULT_VIDEO_ELEMENT = 'video[id="sd-video"]';
-const DEFAULT_PROMPT_TEXTAREA = 'textarea[name*="prompt"], [contenteditable="true"]';
+const DEFAULT_PROMPT_TEXTAREA = 'textarea[aria-label="Make a video"], textarea[name*="prompt"], [contenteditable="true"]';
 const LEGACY_PROMPT_SELECTOR = 'textarea[aria-label="Make a video"][placeholder="Type to customize video..."]';
 
 let customSelectors: CustomSelectors = {};
