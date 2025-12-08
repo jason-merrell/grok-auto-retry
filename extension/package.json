@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build --mode content",
     "watch": "vite build --mode content --watch",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:unit": "vitest run",
+    "test:integration": "npm run build && playwright test tests/integration",
+    "test:e2e": "npm run build && playwright test tests/e2e",
+    "e2e:headed": "PWDEBUG=console playwright test tests/e2e"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -27,14 +32,19 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@testing-library/react": "^16.0.0",
     "@types/chrome": "^0.0.277",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
+    "@vitest/coverage-v8": "^2.1.9",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^24.0.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   }
 }

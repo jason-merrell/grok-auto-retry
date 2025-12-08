@@ -1,24 +1,15 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle } from "lucide-react";
 
 interface RetryStatsProps {
 	retryCount: number;
 	maxRetries: number;
 	videosGenerated: number;
 	videoGoal: number;
-	rapidFailureDetected: boolean;
 }
 
-export const RetryStats: React.FC<RetryStatsProps> = ({
-	retryCount,
-	maxRetries,
-	videosGenerated,
-	videoGoal,
-	rapidFailureDetected,
-}) => {
+export const RetryStats: React.FC<RetryStatsProps> = ({ retryCount, maxRetries, videosGenerated, videoGoal }) => {
 	// Retry badge logic: green (0%) -> orange (50%+) -> red (80%+)
 	const retryPercentage = maxRetries > 0 ? (retryCount / maxRetries) * 100 : 0;
 	let retryClassName = "";
@@ -47,25 +38,6 @@ export const RetryStats: React.FC<RetryStatsProps> = ({
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-2">
 					<Label className="text-sm">Retries Used</Label>
-					{rapidFailureDetected && (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<AlertTriangle className="h-4 w-4 text-orange-300 cursor-help animate-pulse" />
-							</TooltipTrigger>
-							<TooltipContent side="right" className="max-w-xs">
-								<p className="font-semibold mb-1">Rapid Moderation Failure</p>
-								<p className="text-xs mb-2">
-									Your video generation failed in less than 6 seconds, indicating immediate automated
-									content moderation (likely checking prompt text, image content, or both).
-								</p>
-								<p className="text-xs">
-									Consider rephrasing your prompt, using a different image, or trying a completely
-									different approach. Rapid failures are unlikely to succeed with continued retries on the
-									same content.
-								</p>
-							</TooltipContent>
-						</Tooltip>
-					)}
 				</div>
 				<Badge className={retryClassName}>
 					{retryCount ?? 0} / {maxRetries ?? 3}

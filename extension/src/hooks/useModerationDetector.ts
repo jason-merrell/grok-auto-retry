@@ -45,6 +45,11 @@ export const useModerationDetector = (
 
         // Handle moderation detection
         if (isModerationDetected && !moderationDetected) {
+            // Don't schedule a new timeout if one is already pending
+            if (debounceTimeout) {
+                return; // Already processing this moderation event
+            }
+
             // Create a fingerprint for this moderation event to deduplicate
             const notificationsSection = document.querySelector(selectors.notifications.section);
             const latestToast = notificationsSection?.querySelector<HTMLLIElement>('li.toast[data-visible="true"]');
@@ -58,16 +63,12 @@ export const useModerationDetector = (
             }
             lastModerationFingerprintRef.current = fingerprint;
 
-            // Clear any pending debounce
-            if (debounceTimeout) {
-                clearTimeout(debounceTimeout);
-            }
-
             // Debounce the callback to prevent multiple rapid fires
             const timeout = setTimeout(() => {
                 // Guard: prevent multiple triggers within cooldown window
                 const now = Date.now();
                 if (now - lastTriggerAtRef.current < MODERATION_TRIGGER_COOLDOWN_MS) {
+                    setDebounceTimeout(null);
                     return;
                 }
                 lastTriggerAtRef.current = now;
@@ -75,6 +76,7 @@ export const useModerationDetector = (
                 console.log('[Grok Retry] Moderation detected');
                 try { (window as any).__grok_append_log?.('Moderation detected', 'warn'); } catch { }
                 onModerationDetected();
+                setDebounceTimeout(null);
             }, 100);
 
             setDebounceTimeout(timeout);
@@ -88,14 +90,15 @@ export const useModerationDetector = (
 
         // Handle rate limit detection
         if (isRateLimitDetected && !rateLimitDetected) {
-            // Clear any pending debounce
+            // Don't schedule a new timeout if one is already pending
             if (debounceTimeout) {
-                clearTimeout(debounceTimeout);
+                return; // Already processing rate limit
             }
+
+            setRateLimitDetected(true);
 
             // Wait 60 seconds before retrying
             const timeout = setTimeout(() => {
-                setRateLimitDetected(true);
                 console.log('[Grok Retry] Rate limit detected, waiting 60s before retry...');
 
                 // Schedule retry after 60 seconds
@@ -103,6 +106,7 @@ export const useModerationDetector = (
                     console.log('[Grok Retry] Rate limit cooldown complete, retrying...');
                     onModerationDetected();
                     setRateLimitDetected(false);
+                    setDebounceTimeout(null);
                 }, RATE_LIMIT_WAIT_TIME);
             }, 100);
 

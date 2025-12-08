@@ -1,3 +1,8 @@
+import { setupDebug } from "../lib/debug";
+
+setupDebug();
+// Mark when content script entry runs for tests
+(window as any).__grok_content_loaded = true;
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "../styles/globals.css";

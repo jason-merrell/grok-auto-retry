@@ -9,6 +9,14 @@ export const usePostId = (): string | null => {
 
   useEffect(() => {
     const extractPostId = () => {
+      const forced = (window as any).__grok_test?.getForcedPostId?.();
+      if (typeof forced === 'string' && forced.length > 0) {
+        if (forced !== postId) {
+          setPostId(forced);
+        }
+        return;
+      }
+
       const match = window.location.pathname.match(/^\/imagine\/post\/([a-f0-9-]+)/);
       const id = match ? match[1] : null;
       if (id !== postId) {
