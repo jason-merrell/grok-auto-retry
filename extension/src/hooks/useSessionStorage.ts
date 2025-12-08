@@ -11,6 +11,12 @@ interface PersistentData {
 }
 
 // Session-specific state (sessionStorage)
+export interface AttemptProgressEntry {
+    attempt: number;
+    percent: number;
+    recordedAt: number;
+}
+
 interface SessionData {
     retryCount: number;
     isSessionActive: boolean;
@@ -19,6 +25,7 @@ interface SessionData {
     lastFailureTime: number;
     canRetry: boolean;
     logs?: string[];
+    attemptProgress: AttemptProgressEntry[];
 }
 
 // Combined interface for external API
@@ -28,7 +35,7 @@ const PERSISTENT_STORAGE_PREFIX = 'grokRetryPost_';
 const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
 const GLOBAL_SETTINGS_KEY = 'grokRetry_globalSettings';
 const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal'];
-const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs'];
+const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs', 'attemptProgress'];
 
 const createDefaultPostData = (): PostData => ({
     maxRetries: 3,
@@ -42,6 +49,7 @@ const createDefaultPostData = (): PostData => ({
     lastFailureTime: 0,
     canRetry: false,
     logs: [],
+    attemptProgress: [],
 });
 
 export const usePostStorage = (postId: string | null) => {
@@ -55,7 +63,7 @@ export const usePostStorage = (postId: string | null) => {
             try {
                 (window as any).__grok_test = (window as any).__grok_test || {};
                 (window as any).__grok_test.__storageHydrated = true;
-            } catch {}
+            } catch { }
             return;
         }
 
@@ -66,12 +74,12 @@ export const usePostStorage = (postId: string | null) => {
             const w: any = window;
             w.__grok_test = w.__grok_test || {};
             w.__grok_test.__storageHydrated = false;
-        } catch {}
+        } catch { }
 
         // Load global settings first to use as defaults
         chrome.storage.sync.get([GLOBAL_SETTINGS_KEY], (globalResult) => {
             const globalSettings = globalResult[GLOBAL_SETTINGS_KEY] || {};
-            
+
             // Create defaults from global settings
             const DEFAULT_PERSISTENT_DATA: PersistentData = {
                 maxRetries: globalSettings.defaultMaxRetries ?? 3,
@@ -88,22 +96,23 @@ export const usePostStorage = (postId: string | null) => {
                 lastFailureTime: 0,
                 canRetry: false,
                 logs: [],
+                attemptProgress: [],
             };
 
             // Load persistent data from chrome.storage.local
             chrome.storage.local.get([persistentKey], (result) => {
                 const persistentData = result[persistentKey] || DEFAULT_PERSISTENT_DATA;
 
-            // Load session data from sessionStorage
-            let sessionData = DEFAULT_SESSION_DATA;
-            try {
-                const stored = sessionStorage.getItem(sessionKey);
-                if (stored) {
-                    sessionData = { ...DEFAULT_SESSION_DATA, ...JSON.parse(stored) };
+                // Load session data from sessionStorage
+                let sessionData = DEFAULT_SESSION_DATA;
+                try {
+                    const stored = sessionStorage.getItem(sessionKey);
+                    if (stored) {
+                        sessionData = { ...DEFAULT_SESSION_DATA, ...JSON.parse(stored) };
+                    }
+                } catch (error) {
+                    console.error('[Grok Retry] Failed to load session storage:', error);
                 }
-            } catch (error) {
-                console.error('[Grok Retry] Failed to load session storage:', error);
-            }
 
                 const combined = { ...persistentData, ...sessionData };
                 setData(combined);
@@ -112,14 +121,14 @@ export const usePostStorage = (postId: string | null) => {
                     w.__grok_activePostId = postId;
                     w.__grok_retryCount = combined.retryCount;
                     w.__grok_canRetry = combined.canRetry;
-                } catch {}
+                } catch { }
                 console.log('[Grok Retry] Loaded state for post:', postId, { persistentData, sessionData });
                 setIsLoading(false);
                 try {
                     const w: any = window;
                     w.__grok_test = w.__grok_test || {};
                     w.__grok_test.__storageHydrated = true;
-                } catch {}
+                } catch { }
             });
         });
     }, [postId]);
@@ -147,7 +156,7 @@ export const usePostStorage = (postId: string | null) => {
         try {
             const w: any = window;
             w.__grok_lastSave = { targetId, updates, hookPostId: postId, matches: targetId === postId };
-        } catch {}
+        } catch { }
 
         const persistentUpdates: Partial<PersistentData> = {};
         const sessionUpdates: Partial<SessionData> = {};
@@ -176,7 +185,7 @@ export const usePostStorage = (postId: string | null) => {
                     console.log('[Grok Retry][Test] setData count before', w.__grok_lastSetStateCount || 0);
                     w.__grok_lastSetStateCount = (w.__grok_lastSetStateCount || 0) + 1;
                     console.log('[Grok Retry][Test] setData count after', w.__grok_lastSetStateCount);
-                } catch {}
+                } catch { }
                 return next;
             });
         } else {
@@ -185,7 +194,7 @@ export const usePostStorage = (postId: string | null) => {
                 w.__grok_activePostId = targetId;
                 if (typeof updates.retryCount === 'number') w.__grok_retryCount = updates.retryCount;
                 if (typeof updates.canRetry === 'boolean') w.__grok_canRetry = updates.canRetry;
-            } catch {}
+            } catch { }
         }
 
         if (Object.keys(persistentUpdates).length > 0 && typeof chrome !== 'undefined' && chrome?.storage?.local) {
@@ -293,7 +302,7 @@ export const usePostStorage = (postId: string | null) => {
                         if (!stored) {
                             sessionStorage.setItem(sessionKey, JSON.stringify({ retryCount: 0, canRetry: false, isSessionActive: false }));
                         }
-                    } catch {}
+                    } catch { }
                 }
             };
             w.__grok_test.getSessionSnapshot = () => {
@@ -324,7 +333,7 @@ export const usePostStorage = (postId: string | null) => {
                 applyUpdatesToId(targetId, updates);
             };
             w.__grok_test.__bridgeVersion = TEST_BRIDGE_VERSION;
-        } catch {}
+        } catch { }
     }, [applyUpdatesToId, postId, save]);
 
     return { data: postData, save, saveAll: saveToPost, clear, isLoading, appendLog };
