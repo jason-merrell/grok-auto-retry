@@ -20,6 +20,13 @@ A TypeScript-based Chrome extension that automatically retries video generation 
 - 🔒 Hybrid storage - persistent preferences, session-aware state
 - 📦 Built with TypeScript and React for type safety and modern UI
 
+## Installation
+
+- Quick start: [Install from a release ZIP](docs/INSTALL.md#option-a-install-from-a-release-zip-quick-start)
+- Recommended: [Build locally and load unpacked](docs/INSTALL.md#option-b-recommended-build-locally-and-load-unpacked)
+- Full prerequisites, Chrome setup steps, and Node.js/npm guidance live in [docs/INSTALL.md](docs/INSTALL.md).
+- After loading the extension, open <https://grok.com/imagine> or <https://grok.com/imagine/post/*> to confirm the control panel appears.
+
 ## Development
 
 ### Prerequisites
@@ -65,9 +72,9 @@ grok-retry-script/
 3. **Assets**: Copies manifest and static files to `dist/`
 4. **Output**: `dist/` folder ready to load as unpacked extension
 
-### Installation
+### Installing Dependencies
 
-See [docs/INSTALL.md](docs/INSTALL.md) for detailed installation instructions.
+See the [Installation](#installation) section above for how to load the extension, then follow the commands below to set up the development environment.
 
 ## Usage
 
