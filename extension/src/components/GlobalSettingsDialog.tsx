@@ -399,7 +399,9 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 									<Label htmlFor="autoSwitchResults" className="text-sm">
 										Auto-Switch to Results Panel
 									</Label>
-									<p className="text-xs text-muted-foreground">Show the previous session summary when it finishes</p>
+									<p className="text-xs text-muted-foreground">
+										Show the previous session summary when it finishes
+									</p>
 								</div>
 								<Switch
 									id="autoSwitchResults"
