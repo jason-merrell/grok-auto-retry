@@ -13,6 +13,7 @@ A TypeScript-based Chrome extension that automatically retries video generation 
 - 🔄 Real-time progress in browser tab title with completion status
 - 🎨 Resizable, draggable UI panel with fullscreen maximize mode
 - 📊 Dynamic progress badges with color-coded status
+- 🧭 Results summary with moderation layer explainer and mitigation tips
 - 🐛 Debug panel with real-time session logs and color-coded severity levels
 - ⚠️ Rapid failure detection warns of immediate automated content checks
 - 💚 Visual session indicator with pulsing active badge
@@ -100,6 +101,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for detailed installation instructions.
 - **Save/Load**: Manage globally saved prompts with rename and delete options
 - **Import/Export**: Import or export prompt text files
 - **Settings**: Open global settings sheet (gear icon) to configure defaults, timing, UI preferences, and advanced options
+  - Advanced tab toggles include auto-switching to debug on session start and optionally opening the results summary when a session completes.
 
 ## Contributing
 
