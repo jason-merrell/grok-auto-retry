@@ -6,6 +6,7 @@ export default defineConfig({
     plugins: [react()],
     build: {
         outDir: 'dist',
+        chunkSizeWarningLimit: 1024,
         rollupOptions: {
             input: { content: resolve(__dirname, 'src/content/index.tsx') },
             output: {

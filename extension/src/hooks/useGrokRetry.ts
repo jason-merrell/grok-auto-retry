@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { getGenerateButtonSelectors, getPromptSelectorCandidates } from '../config/selectors';
 import { findPromptInput, writePromptValue } from '../lib/promptInput';
 import { usePostStorage } from './useSessionStorage';
+import type { SessionOutcome, SessionSummary } from './useSessionStorage';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
 const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
@@ -74,6 +75,7 @@ export const useGrokRetry = (postId: string | null) => {
     }, [originalPageTitle]);
 
     const maxRetries = postData.maxRetries;
+    const retryCount = postData.retryCount;
     const autoRetryEnabled = postData.autoRetryEnabled;
     const lastPromptValue = postData.lastPromptValue;
     const isSessionActive = postData.isSessionActive;
@@ -85,6 +87,8 @@ export const useGrokRetry = (postId: string | null) => {
     const layer1Failures = postData.layer1Failures ?? 0;
     const layer2Failures = postData.layer2Failures ?? 0;
     const layer3Failures = postData.layer3Failures ?? 0;
+    const lastSessionOutcome = postData.lastSessionOutcome;
+    const lastSessionSummary = postData.lastSessionSummary;
 
     try {
         const w = window as any;
@@ -115,6 +119,10 @@ export const useGrokRetry = (postId: string | null) => {
     const setVideoGoal = useCallback((value: number) => {
         const clamped = Math.max(1, Math.min(50, value));
         save('videoGoal', clamped);
+    }, [save]);
+
+    const clearLogs = useCallback(() => {
+        save('logs', []);
     }, [save]);
 
     const resetProgressTracking = useCallback(() => {
@@ -179,11 +187,25 @@ export const useGrokRetry = (postId: string | null) => {
             layer1Failures: 0,
             layer2Failures: 0,
             layer3Failures: 0,
+            lastSessionOutcome: 'pending',
+            lastSessionSummary: null,
         });
     }, [resetProgressTracking, saveAll]);
 
-    const endSession = useCallback(() => {
+    const endSession = useCallback((outcome: SessionOutcome = 'idle') => {
         resetProgressTracking();
+        const summary: SessionSummary = {
+            outcome,
+            completedVideos: videosGenerated,
+            videoGoal,
+            retriesAttempted: retryCount,
+            maxRetries,
+            creditsUsed,
+            layer1Failures,
+            layer2Failures,
+            layer3Failures,
+            endedAt: Date.now(),
+        };
         saveAll({
             isSessionActive: false,
             retryCount: 0,
@@ -192,8 +214,10 @@ export const useGrokRetry = (postId: string | null) => {
             layer1Failures: 0,
             layer2Failures: 0,
             layer3Failures: 0,
+            lastSessionOutcome: outcome,
+            lastSessionSummary: summary,
         });
-    }, [resetProgressTracking, saveAll]);
+    }, [resetProgressTracking, saveAll, videosGenerated, videoGoal, retryCount, maxRetries, creditsUsed, layer1Failures, layer2Failures, layer3Failures]);
 
     const markFailureDetected = useCallback(() => {
         const now = Date.now();
@@ -210,11 +234,8 @@ export const useGrokRetry = (postId: string | null) => {
 
         const attemptIndex = Math.max(0, postData.retryCount);
         const percentLabel = progressPercent !== null ? `${progressPercent}%` : 'unknown progress';
-        const { label: moderationLayer, explanation: layerExplanation, layer } = describeModerationLayer(progressPercent);
-        appendLog(
-            `Attempt ${attemptIndex} failed at ${percentLabel} — assumed ${moderationLayer}. ${layerExplanation}`,
-            'warn'
-        );
+        const { label: moderationLayer, layer } = describeModerationLayer(progressPercent);
+        appendLog(`Failed at ${percentLabel} — ${moderationLayer}`, 'warn');
 
         if (layer === 1) {
             updates.layer1Failures = layer1Failures + 1;
@@ -254,7 +275,7 @@ export const useGrokRetry = (postId: string | null) => {
             const w: any = window;
             w.__grok_test = w.__grok_test || {};
             w.__grok_test.startSession = () => startSession();
-            w.__grok_test.endSession = () => endSession();
+            w.__grok_test.endSession = (outcome?: SessionOutcome) => endSession(outcome);
             w.__grok_test.markFailureDetected = () => markFailureDetected();
             w.__grok_test.__retryBridgeVersion = 'grok-retry@1';
             w.__grok_test.__retryPostId = postId;
@@ -323,7 +344,6 @@ export const useGrokRetry = (postId: string | null) => {
             const restored = writePromptValue(promptEntry.element, valueToSet);
             if (restored) {
                 console.log('[Grok Retry] Restored prompt to input:', valueToSet.substring(0, 50) + '...');
-                appendLog('Restored prompt to site input', 'info');
             } else {
                 console.log('[Grok Retry] Failed to restore prompt using target element');
                 appendLog('Failed to restore prompt into detected input', 'warn');
@@ -333,7 +353,6 @@ export const useGrokRetry = (postId: string | null) => {
             appendLog('No prompt value available to restore', 'warn');
         }
 
-        appendLog('Clicking generate button', 'info');
         button.click();
         setLastClickTime(now);
         // Expose last attempt per postId globally for detectors to correlate success across tabs
@@ -351,7 +370,6 @@ export const useGrokRetry = (postId: string | null) => {
         // Reset retry permission until next failure notification
         save('canRetry', false);
         console.log('[Grok Retry] Clicked button');
-        appendLog('Clicked — attempt started', 'info');
         beginProgressTracking();
 
         return true;
@@ -409,7 +427,7 @@ export const useGrokRetry = (postId: string | null) => {
 
                 if (goalReached) {
                     appendLog(`Video goal reached — ending session (${postData.videosGenerated}/${postData.videoGoal})`, 'info');
-                    endSession();
+                    endSession('success');
                     return;
                 }
 
@@ -418,7 +436,7 @@ export const useGrokRetry = (postId: string | null) => {
                 if (postData.lastAttemptTime > 0 && timeSinceLastAttempt > SESSION_TIMEOUT) {
                     console.warn('[Grok Retry] Session timeout - no feedback for 2 minutes, ending session');
                     appendLog('Session timeout - ending (no success/failure feedback received)', 'warn');
-                    endSession();
+                    endSession('cancelled');
                     return;
                 }
 
@@ -500,6 +518,8 @@ export const useGrokRetry = (postId: string | null) => {
         layer1Failures,
         layer2Failures,
         layer3Failures,
+        lastSessionOutcome,
+        lastSessionSummary,
         isLoading,
 
         // Actions
@@ -514,6 +534,7 @@ export const useGrokRetry = (postId: string | null) => {
         incrementVideosGenerated,
         resetVideosGenerated,
         markFailureDetected,
+        clearLogs,
     }), [
         postData.retryCount,
         maxRetries,
@@ -532,6 +553,8 @@ export const useGrokRetry = (postId: string | null) => {
         layer1Failures,
         layer2Failures,
         layer3Failures,
+        lastSessionOutcome,
+        lastSessionSummary,
         isLoading,
         setMaxRetries,
         setAutoRetryEnabled,
@@ -544,5 +567,6 @@ export const useGrokRetry = (postId: string | null) => {
         incrementVideosGenerated,
         resetVideosGenerated,
         markFailureDetected,
+        clearLogs,
     ]);
 };

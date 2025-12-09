@@ -10,6 +10,7 @@ import { usePanelResize } from "@/hooks/usePanelResize";
 import { useMiniToggleDrag } from "@/hooks/useMiniToggleDrag";
 import { useRouteMatch } from "@/hooks/useRouteMatch";
 import { usePostId } from "@/hooks/usePostId";
+import { useGlobalSettings } from "@/hooks/useGlobalSettings";
 import { ControlPanel } from "@/components/ControlPanel";
 import { MiniToggle } from "@/components/MiniToggle";
 import { ImaginePanel } from "@/components/ImaginePanel";
@@ -19,6 +20,7 @@ const ImaginePostApp: React.FC = () => {
 	// Only show on /imagine/post/* routes
 	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
 	const postId = usePostId();
+	const { settings: globalSettings, isLoading: globalSettingsLoading } = useGlobalSettings();
 	// Provide a global append log helper used by detectors
 	useEffect(() => {
 		(window as any).__grok_append_log = (line: string, level: "info" | "warn" | "error" | "success" = "info") => {
@@ -63,6 +65,9 @@ const ImaginePostApp: React.FC = () => {
 		logs = [],
 		originalPageTitle,
 		isLoading,
+		clearLogs,
+		lastSessionOutcome,
+		lastSessionSummary,
 	} = retry;
 	const { data: uiPrefs, save: saveUIPref } = useStorage();
 	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
@@ -72,6 +77,8 @@ const ImaginePostApp: React.FC = () => {
 	const [settingsOpen, setSettingsOpen] = React.useState(false);
 	const nextVideoTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 	const hasCheckedInterruptedSession = React.useRef(false);
+	const [showResults, setShowResults] = React.useState(false);
+	const lastSummarySignatureRef = React.useRef<string | null>(null);
 
 	// Handle moderation detection
 	const handleModerationDetected = React.useCallback(() => {
@@ -102,7 +109,8 @@ const ImaginePostApp: React.FC = () => {
 			// End session if we're not going to retry
 			if (isSessionActive) {
 				console.log("[Grok Retry] Ending session - no retry will occur");
-				endSession();
+				const outcome = autoRetryEnabled ? "failure" : "cancelled";
+				endSession(outcome);
 			}
 			return;
 		}
@@ -147,7 +155,7 @@ const ImaginePostApp: React.FC = () => {
 		// Check if we've reached the video goal
 		if (newCount >= videoGoal) {
 			console.log(`[Grok Retry] Video goal reached! Generated ${newCount}/${videoGoal} videos`);
-			endSession();
+			endSession("success");
 		} else {
 			// Continue generating - restart the cycle
 			console.log(`[Grok Retry] Progress: ${newCount}/${videoGoal} videos generated, continuing...`);
@@ -204,7 +212,7 @@ const ImaginePostApp: React.FC = () => {
 			if (isSessionActive) {
 				console.log("[Grok Retry] Detected active session after page load - auto-canceling interrupted session");
 				hasCheckedInterruptedSession.current = true;
-				endSession();
+				endSession("cancelled");
 			} else {
 				// Only mark as checked if we've waited long enough for session data to load
 				// Use a small delay to ensure session state has fully settled
@@ -235,7 +243,7 @@ const ImaginePostApp: React.FC = () => {
 			if (!hasCheckedInterruptedSession.current && isSessionActive && postId) {
 				console.log("[Grok Retry] Fallback: Detected active session after delay - auto-canceling");
 				hasCheckedInterruptedSession.current = true;
-				endSession();
+				endSession("cancelled");
 			}
 		}, 200);
 
@@ -251,13 +259,53 @@ const ImaginePostApp: React.FC = () => {
 		rateLimitDetected,
 		videoGoal,
 		videosGenerated,
-		isSessionActive
+		isSessionActive,
+		lastSessionOutcome
 	);
 
-	// Auto-toggle debug panel based on session state
+	// Auto-toggle debug panel based on session state and global settings preference
 	useEffect(() => {
-		setShowDebug(isSessionActive);
-	}, [isSessionActive]);
+		if (globalSettingsLoading) {
+			return;
+		}
+
+		if (!isSessionActive) {
+			setShowDebug(false);
+			return;
+		}
+
+		setShowResults(false);
+
+		if (globalSettings.autoSwitchToDebug) {
+			setShowDebug(true);
+		}
+	}, [isSessionActive, globalSettings.autoSwitchToDebug, globalSettingsLoading]);
+
+	React.useEffect(() => {
+		if (!lastSessionSummary) {
+			lastSummarySignatureRef.current = null;
+			setShowResults(false);
+			return;
+		}
+
+		const { outcome, endedAt, retriesAttempted, completedVideos } = lastSessionSummary;
+		const signature = `${outcome}:${endedAt ?? ""}:${retriesAttempted}:${completedVideos}`;
+		if (lastSummarySignatureRef.current === signature) {
+			return;
+		}
+
+		lastSummarySignatureRef.current = signature;
+
+		if (
+			(outcome === "success" || outcome === "failure" || outcome === "cancelled") &&
+			globalSettings.autoSwitchToResultsOnComplete
+		) {
+			setShowResults(true);
+			if (showDebug) {
+				setShowDebug(false);
+			}
+		}
+	}, [lastSessionSummary, showDebug, setShowDebug, globalSettings.autoSwitchToResultsOnComplete]);
 
 	// Set up click listener for prompt capture
 	useEffect(() => {
@@ -329,7 +377,7 @@ const ImaginePostApp: React.FC = () => {
 			nextVideoTimeoutRef.current = null;
 			console.log("[Grok Retry] Cleared pending next video timeout");
 		}
-		endSession();
+		endSession("cancelled");
 	};
 
 	const handleMinimizeClick = () => {
@@ -395,6 +443,10 @@ const ImaginePostApp: React.FC = () => {
 					showDebug={showDebug}
 					setShowDebug={setShowDebug}
 					onSettingsClick={() => setSettingsOpen(true)}
+					onClearLogs={clearLogs}
+					showResults={showResults}
+					setShowResults={setShowResults}
+					lastSessionSummary={lastSessionSummary}
 				/>
 				<GlobalSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 			</TooltipProvider>

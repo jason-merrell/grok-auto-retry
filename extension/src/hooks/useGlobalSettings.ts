@@ -21,7 +21,8 @@ export interface GlobalSettings {
     // Feature toggles
     showRapidFailureWarning: boolean;
     autoSwitchToDebug: boolean; // Auto-switch to debug panel on session start
-    
+    autoSwitchToResultsOnComplete: boolean; // Auto-open results after a session finishes
+
     // Selector overrides (for language differences or when selectors change)
     customSelectors?: {
         notificationSection?: string;
@@ -29,7 +30,7 @@ export interface GlobalSettings {
         videoElement?: string;
         promptTextarea?: string;
     };
-    
+
     // Import/Export
     lastExportDate?: string;
 }
@@ -46,7 +47,8 @@ const DEFAULT_SETTINGS: GlobalSettings = {
     defaultPanelHeight: 400,
     startMinimized: false,
     showRapidFailureWarning: true,
-    autoSwitchToDebug: true,
+    autoSwitchToDebug: false,
+    autoSwitchToResultsOnComplete: false,
     customSelectors: undefined,
 };
 
@@ -62,17 +64,17 @@ export const useGlobalSettings = () => {
     useEffect(() => {
         chrome.storage.sync.get([STORAGE_KEY, STORAGE_VERSION_KEY], (result) => {
             const version = result[STORAGE_VERSION_KEY] || 0;
-            
+
             if (result[STORAGE_KEY]) {
                 // Merge with defaults to handle new settings in updates
                 setSettings({ ...DEFAULT_SETTINGS, ...result[STORAGE_KEY] });
             }
-            
+
             // Handle version migrations if needed
             if (version < CURRENT_VERSION) {
                 chrome.storage.sync.set({ [STORAGE_VERSION_KEY]: CURRENT_VERSION });
             }
-            
+
             setIsLoading(false);
         });
 
@@ -128,17 +130,17 @@ export const useGlobalSettings = () => {
     const importSettings = useCallback((jsonString: string): { success: boolean; error?: string } => {
         try {
             const importData = JSON.parse(jsonString);
-            
+
             if (!importData.settings) {
                 return { success: false, error: 'Invalid settings format' };
             }
 
             // Validate and merge with defaults
             const imported = { ...DEFAULT_SETTINGS, ...importData.settings };
-            
+
             setSettings(imported);
             chrome.storage.sync.set({ [STORAGE_KEY]: imported });
-            
+
             return { success: true };
         } catch (error) {
             return { success: false, error: 'Failed to parse JSON' };

@@ -2,7 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Minimize2, Minimize, Fullscreen, Bug, Settings } from "lucide-react";
+import { Minimize2, Minimize, Fullscreen, Bug, Settings, PieChart } from "lucide-react";
 
 interface PanelHeaderProps {
 	isMaximized: boolean;
@@ -12,6 +12,10 @@ interface PanelHeaderProps {
 	onToggleDebug?: () => void;
 	isDebug?: boolean;
 	onSettingsClick?: () => void;
+	logCount?: number;
+	onToggleResults?: () => void;
+	isResultsVisible?: boolean;
+	hasResults?: boolean;
 }
 
 export const PanelHeader: React.FC<PanelHeaderProps> = ({
@@ -22,6 +26,10 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 	onToggleDebug,
 	isDebug,
 	onSettingsClick,
+	logCount,
+	onToggleResults,
+	isResultsVisible,
+	hasResults,
 }) => {
 	return (
 		<div className="flex items-center justify-between">
@@ -42,16 +50,35 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 				)}
 			</div>
 			<div className="flex gap-1">
+				{hasResults && onToggleResults && (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant={isResultsVisible ? "secondary" : "ghost"}
+								size="icon"
+								className="h-7 w-7"
+								onClick={onToggleResults}
+								aria-label={isResultsVisible ? "Hide Results" : "Show Results"}
+							>
+								<PieChart className="h-4 w-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>{isResultsVisible ? "Hide Results" : "Show Results"}</TooltipContent>
+					</Tooltip>
+				)}
 				{onToggleDebug && (
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
 								variant={isDebug ? "secondary" : "ghost"}
 								size="icon"
-								className="h-7 w-7"
+								className="relative h-7 w-7"
 								onClick={onToggleDebug}
 							>
 								<Bug className="h-4 w-4" />
+								{typeof logCount === "number" && logCount > 0 && (
+									<span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full border border-background bg-amber-400 shadow-sm" />
+								)}
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent>{isDebug ? "Hide Logs" : "Show Logs"}</TooltipContent>

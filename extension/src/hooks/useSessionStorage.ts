@@ -10,6 +10,21 @@ interface PersistentData {
     videoGoal: number;
 }
 
+export type SessionOutcome = 'idle' | 'pending' | 'success' | 'failure' | 'cancelled';
+
+export interface SessionSummary {
+    outcome: SessionOutcome;
+    completedVideos: number;
+    videoGoal: number;
+    retriesAttempted: number;
+    maxRetries: number;
+    creditsUsed: number;
+    layer1Failures: number;
+    layer2Failures: number;
+    layer3Failures: number;
+    endedAt: number;
+}
+
 // Session-specific state (sessionStorage)
 export interface AttemptProgressEntry {
     attempt: number;
@@ -30,6 +45,8 @@ interface SessionData {
     layer1Failures: number;
     layer2Failures: number;
     layer3Failures: number;
+    lastSessionOutcome: SessionOutcome;
+    lastSessionSummary: SessionSummary | null;
 }
 
 // Combined interface for external API
@@ -39,7 +56,7 @@ const PERSISTENT_STORAGE_PREFIX = 'grokRetryPost_';
 const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
 const GLOBAL_SETTINGS_KEY = 'grokRetry_globalSettings';
 const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal'];
-const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs', 'attemptProgress'];
+const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs', 'attemptProgress', 'lastSessionOutcome', 'lastSessionSummary'];
 const SESSION_COUNTER_KEYS: (keyof SessionData)[] = ['creditsUsed', 'layer1Failures', 'layer2Failures', 'layer3Failures'];
 const ALL_SESSION_KEYS: (keyof SessionData)[] = [...SESSION_KEYS, ...SESSION_COUNTER_KEYS];
 
@@ -60,6 +77,8 @@ const createDefaultPostData = (): PostData => ({
     layer1Failures: 0,
     layer2Failures: 0,
     layer3Failures: 0,
+    lastSessionOutcome: 'idle',
+    lastSessionSummary: null,
 });
 
 export const usePostStorage = (postId: string | null) => {
@@ -111,6 +130,8 @@ export const usePostStorage = (postId: string | null) => {
                 layer1Failures: 0,
                 layer2Failures: 0,
                 layer3Failures: 0,
+                lastSessionOutcome: 'idle',
+                lastSessionSummary: null,
             };
 
             // Load persistent data from chrome.storage.local

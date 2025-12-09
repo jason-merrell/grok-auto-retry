@@ -394,6 +394,23 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 								/>
 							</div>
 
+							<div className="flex items-center justify-between">
+								<div className="space-y-1">
+									<Label htmlFor="autoSwitchResults" className="text-sm">
+										Auto-Switch to Results Panel
+									</Label>
+									<p className="text-xs text-muted-foreground">Show the previous session summary when it finishes</p>
+								</div>
+								<Switch
+									id="autoSwitchResults"
+									checked={settings.autoSwitchToResultsOnComplete}
+									onCheckedChange={(checked) => {
+										saveSetting("autoSwitchToResultsOnComplete", checked);
+										showSaveStatus("Saved");
+									}}
+								/>
+							</div>
+
 							<div className="border-t pt-4 space-y-4">
 								<div>
 									<h4 className="text-sm font-medium mb-1">Custom CSS Selectors</h4>
