@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Copy, Trash2 } from "lucide-react";
+import { Copy, Trash2, Volume2, VolumeX } from "lucide-react";
 import { Pie, PieChart, ResponsiveContainer } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import {
@@ -23,6 +23,7 @@ import { PromptTextarea } from "./PromptTextarea";
 import { PromptPartials } from "./PromptPartials";
 import { ActionButton } from "./ActionButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { PromptHistoryRecord } from "@/hooks/usePromptHistory";
 
 const ATTEMPT_CHART_CONFIG: ChartConfig = {
 	success: { label: "Successes", color: "hsl(142 70% 45%)" },
@@ -70,6 +71,12 @@ interface ControlPanelProps {
 	showResults: boolean;
 	setShowResults: (value: boolean) => void;
 	lastSessionSummary: SessionSummary | null;
+	promptHistoryRecords: PromptHistoryRecord[];
+	muteControl?: {
+		isMuted: boolean;
+		isAvailable: boolean;
+		toggleMute: () => void;
+	};
 }
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -105,6 +112,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 	showResults,
 	setShowResults,
 	lastSessionSummary,
+	promptHistoryRecords,
+	muteControl,
 }) => {
 	const logsContainerRef = React.useRef<HTMLDivElement>(null);
 	const [isUserScrolledUp, setIsUserScrolledUp] = React.useState(false);
@@ -557,8 +566,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 					onChange={onPromptChange}
 					onCopyFromSite={onCopyFromSite}
 					onCopyToSite={onCopyToSite}
-					disabled={!autoRetryEnabled}
+					disabled={isSessionActive}
 					isMaximized={isMaximized}
+					promptHistoryRecords={promptHistoryRecords}
 				/>
 
 				<PromptPartials onAppendPartial={onPromptAppend} disabled={!autoRetryEnabled} />
@@ -616,11 +626,28 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 				</CardContent>
 
 				<div className="px-6 pb-4 shrink-0 border-t border-border pt-3">
-					<ActionButton
-						isSessionActive={isSessionActive}
-						onGenerate={onGenerateVideo}
-						onCancel={onCancelSession}
-					/>
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+						<div className="flex-1">
+							<ActionButton
+								isSessionActive={isSessionActive}
+								onGenerate={onGenerateVideo}
+								onCancel={onCancelSession}
+							/>
+						</div>
+						{muteControl?.isAvailable ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								onClick={muteControl.toggleMute}
+								className="h-9 w-9 rounded-full text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+								aria-label={muteControl.isMuted ? "Unmute video" : "Mute video"}
+							>
+								{muteControl.isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+								<span className="sr-only">{muteControl.isMuted ? "Unmute" : "Mute"}</span>
+							</Button>
+						) : null}
+					</div>
 				</div>
 			</Card>
 			<Dialog open={!!activeLayer} onOpenChange={(open) => !open && setActiveLayerKey(null)}>

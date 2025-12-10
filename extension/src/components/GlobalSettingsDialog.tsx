@@ -358,6 +358,32 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 					{/* Advanced Tab */}
 					{activeTab === "advanced" && (
 						<div className="space-y-4">
+							<div className="space-y-2">
+								<Label htmlFor="promptHistoryLimit" className="text-sm">
+									Prompt History Limit
+									<Badge variant="secondary" className="ml-2 text-xs">
+										{settings.promptHistoryLimit}
+									</Badge>
+								</Label>
+								<Input
+									id="promptHistoryLimit"
+									type="number"
+									min={1}
+									max={200}
+									defaultValue={settings.promptHistoryLimit}
+									onBlur={(e) => {
+										const parsed = parseInt(e.target.value, 10);
+										const next = Number.isNaN(parsed) ? 30 : Math.max(1, Math.min(200, parsed));
+										saveSetting("promptHistoryLimit", next);
+										showSaveStatus("Saved");
+									}}
+									className="w-32"
+								/>
+								<p className="text-xs text-muted-foreground">
+									Number of prompt history records to retain (1-200)
+								</p>
+							</div>
+
 							<div className="flex items-center justify-between">
 								<div className="space-y-1">
 									<Label htmlFor="showRapidFailure" className="text-sm">

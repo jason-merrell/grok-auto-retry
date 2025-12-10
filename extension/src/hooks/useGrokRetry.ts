@@ -219,7 +219,7 @@ export const useGrokRetry = (postId: string | null) => {
         });
     }, [resetProgressTracking, saveAll, videosGenerated, videoGoal, retryCount, maxRetries, creditsUsed, layer1Failures, layer2Failures, layer3Failures]);
 
-    const markFailureDetected = useCallback(() => {
+    const markFailureDetected = useCallback((): 1 | 2 | 3 | null => {
         const now = Date.now();
         // Avoid enabling immediate duplicate retries if a click just occurred
         const justClicked = now - lastClickTime < 250;
@@ -257,6 +257,7 @@ export const useGrokRetry = (postId: string | null) => {
 
         saveAll(updates);
         resetProgressTracking();
+        return layer ?? null;
     }, [
         lastClickTime,
         saveAll,

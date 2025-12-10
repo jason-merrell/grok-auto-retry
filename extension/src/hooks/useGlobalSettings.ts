@@ -7,6 +7,9 @@ export interface GlobalSettings {
     defaultVideoGoal: number;
     defaultAutoRetryEnabled: boolean;
 
+    // Prompt history
+    promptHistoryLimit: number;
+
     // Timing configuration
     retryClickCooldown: number; // milliseconds between retries
     videoGenerationDelay: number; // milliseconds between video goal generations
@@ -35,10 +38,36 @@ export interface GlobalSettings {
     lastExportDate?: string;
 }
 
+const PROMPT_HISTORY_LIMIT_MIN = 1;
+const PROMPT_HISTORY_LIMIT_MAX = 200;
+const DEFAULT_PROMPT_HISTORY_LIMIT = 30;
+
+const clampPromptHistoryLimit = (value: unknown): number => {
+    const numeric =
+        typeof value === 'number'
+            ? value
+            : parseInt(typeof value === 'string' ? value : String(value ?? DEFAULT_PROMPT_HISTORY_LIMIT), 10);
+
+    if (!Number.isFinite(numeric)) {
+        return DEFAULT_PROMPT_HISTORY_LIMIT;
+    }
+
+    return Math.max(
+        PROMPT_HISTORY_LIMIT_MIN,
+        Math.min(PROMPT_HISTORY_LIMIT_MAX, Math.round(numeric))
+    );
+};
+
+const normalizeSettings = (settings: GlobalSettings): GlobalSettings => ({
+    ...settings,
+    promptHistoryLimit: clampPromptHistoryLimit(settings.promptHistoryLimit),
+});
+
 const DEFAULT_SETTINGS: GlobalSettings = {
     defaultMaxRetries: 3,
     defaultVideoGoal: 1,
     defaultAutoRetryEnabled: true,
+    promptHistoryLimit: DEFAULT_PROMPT_HISTORY_LIMIT,
     retryClickCooldown: 8000,
     videoGenerationDelay: 8000,
     rateLimitWaitTime: 60000,
@@ -57,7 +86,7 @@ const STORAGE_VERSION_KEY = 'grokRetry_settingsVersion';
 const CURRENT_VERSION = 1;
 
 export const useGlobalSettings = () => {
-    const [settings, setSettings] = useState<GlobalSettings>(DEFAULT_SETTINGS);
+    const [settings, setSettings] = useState<GlobalSettings>(() => ({ ...DEFAULT_SETTINGS }));
     const [isLoading, setIsLoading] = useState(true);
 
     // Load settings from chrome.storage.sync (syncs across devices)
@@ -65,10 +94,12 @@ export const useGlobalSettings = () => {
         chrome.storage.sync.get([STORAGE_KEY, STORAGE_VERSION_KEY], (result) => {
             const version = result[STORAGE_VERSION_KEY] || 0;
 
-            if (result[STORAGE_KEY]) {
-                // Merge with defaults to handle new settings in updates
-                setSettings({ ...DEFAULT_SETTINGS, ...result[STORAGE_KEY] });
-            }
+            const storedSettings = result[STORAGE_KEY];
+            const mergedSettings = storedSettings
+                ? normalizeSettings({ ...DEFAULT_SETTINGS, ...storedSettings })
+                : normalizeSettings({ ...DEFAULT_SETTINGS });
+
+            setSettings(mergedSettings);
 
             // Handle version migrations if needed
             if (version < CURRENT_VERSION) {
@@ -81,7 +112,12 @@ export const useGlobalSettings = () => {
         // Listen for changes from other tabs/devices
         const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
             if (areaName === 'sync' && changes[STORAGE_KEY]) {
-                setSettings({ ...DEFAULT_SETTINGS, ...changes[STORAGE_KEY].newValue });
+                setSettings(
+                    normalizeSettings({
+                        ...DEFAULT_SETTINGS,
+                        ...changes[STORAGE_KEY].newValue,
+                    } as GlobalSettings)
+                );
             }
         };
 
@@ -95,7 +131,7 @@ export const useGlobalSettings = () => {
         value: GlobalSettings[K]
     ) => {
         setSettings((prev) => {
-            const updated = { ...prev, [key]: value };
+            const updated = normalizeSettings({ ...prev, [key]: value } as GlobalSettings);
             chrome.storage.sync.set({ [STORAGE_KEY]: updated });
             return updated;
         });
@@ -104,7 +140,7 @@ export const useGlobalSettings = () => {
     // Save multiple settings at once
     const saveSettings = useCallback((updates: Partial<GlobalSettings>) => {
         setSettings((prev) => {
-            const updated = { ...prev, ...updates };
+            const updated = normalizeSettings({ ...prev, ...updates } as GlobalSettings);
             chrome.storage.sync.set({ [STORAGE_KEY]: updated });
             return updated;
         });
@@ -112,8 +148,9 @@ export const useGlobalSettings = () => {
 
     // Reset to defaults
     const resetToDefaults = useCallback(() => {
-        setSettings(DEFAULT_SETTINGS);
-        chrome.storage.sync.set({ [STORAGE_KEY]: DEFAULT_SETTINGS });
+        const defaultsClone = normalizeSettings({ ...DEFAULT_SETTINGS });
+        setSettings(defaultsClone);
+        chrome.storage.sync.set({ [STORAGE_KEY]: defaultsClone });
     }, []);
 
     // Export settings as JSON
@@ -136,7 +173,7 @@ export const useGlobalSettings = () => {
             }
 
             // Validate and merge with defaults
-            const imported = { ...DEFAULT_SETTINGS, ...importData.settings };
+            const imported = normalizeSettings({ ...DEFAULT_SETTINGS, ...importData.settings } as GlobalSettings);
 
             setSettings(imported);
             chrome.storage.sync.set({ [STORAGE_KEY]: imported });

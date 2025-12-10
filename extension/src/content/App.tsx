@@ -11,6 +11,9 @@ import { useMiniToggleDrag } from "@/hooks/useMiniToggleDrag";
 import { useRouteMatch } from "@/hooks/useRouteMatch";
 import { usePostId } from "@/hooks/usePostId";
 import { useGlobalSettings } from "@/hooks/useGlobalSettings";
+import usePromptHistory from "@/hooks/usePromptHistory";
+import { useMuteController } from "@/hooks/useMuteController";
+import type { PromptHistoryLayer } from "@/lib/promptHistory";
 import { ControlPanel } from "@/components/ControlPanel";
 import { MiniToggle } from "@/components/MiniToggle";
 import { ImaginePanel } from "@/components/ImaginePanel";
@@ -21,6 +24,7 @@ const ImaginePostApp: React.FC = () => {
 	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
 	const postId = usePostId();
 	const { settings: globalSettings, isLoading: globalSettingsLoading } = useGlobalSettings();
+	const muteControl = useMuteController(isImaginePostRoute);
 	// Provide a global append log helper used by detectors
 	useEffect(() => {
 		(window as any).__grok_append_log = (line: string, level: "info" | "warn" | "error" | "success" = "info") => {
@@ -71,6 +75,7 @@ const ImaginePostApp: React.FC = () => {
 	} = retry;
 	const { data: uiPrefs, save: saveUIPref } = useStorage();
 	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
+	const { records: promptHistoryRecords, recordOutcome: recordPromptHistoryOutcome } = usePromptHistory();
 	const panelResize = usePanelResize();
 	const miniDrag = useMiniToggleDrag();
 	const [showDebug, setShowDebug] = React.useState(false);
@@ -79,6 +84,22 @@ const ImaginePostApp: React.FC = () => {
 	const hasCheckedInterruptedSession = React.useRef(false);
 	const [showResults, setShowResults] = React.useState(false);
 	const lastSummarySignatureRef = React.useRef<string | null>(null);
+	const sessionPromptRef = React.useRef<string | null>(null);
+
+	const recordPromptOutcome = React.useCallback(
+		(status: "success" | "failure", layer?: PromptHistoryLayer | null) => {
+			const baseText = sessionPromptRef.current ?? lastPromptValue;
+			if (!baseText) {
+				return;
+			}
+			recordPromptHistoryOutcome({
+				text: baseText,
+				status,
+				layer: layer ?? undefined,
+			});
+		},
+		[recordPromptHistoryOutcome, lastPromptValue]
+	);
 
 	// Handle moderation detection
 	const handleModerationDetected = React.useCallback(() => {
@@ -96,8 +117,22 @@ const ImaginePostApp: React.FC = () => {
 			}
 		}
 
-		// Check if we should retry
 		const shouldRetry = autoRetryEnabled && retryCount < maxRetries;
+		console.log("[Grok Retry] Moderation detected, current count:", retryCount);
+
+		let promptSnapshot = sessionPromptRef.current ?? lastPromptValue;
+		if (!promptSnapshot && retryCount === 0) {
+			const captured = capturePromptFromSite();
+			if (captured) {
+				promptSnapshot = captured;
+				sessionPromptRef.current = captured;
+				updatePromptValue(captured);
+				console.log("[Grok Retry] Auto-captured prompt on first moderation");
+			}
+		}
+
+		const failureLayer = markFailureDetected();
+		recordPromptOutcome("failure", failureLayer);
 
 		if (!shouldRetry) {
 			console.log("[Grok Retry] Moderation detected but not retrying:", {
@@ -106,7 +141,6 @@ const ImaginePostApp: React.FC = () => {
 				maxRetries,
 			});
 
-			// End session if we're not going to retry
 			if (isSessionActive) {
 				console.log("[Grok Retry] Ending session - no retry will occur");
 				const outcome = autoRetryEnabled ? "failure" : "cancelled";
@@ -115,21 +149,9 @@ const ImaginePostApp: React.FC = () => {
 			return;
 		}
 
-		console.log("[Grok Retry] Moderation detected, current count:", retryCount);
-
-		// If this is the first retry and we don't have a prompt, try to capture it
-		let promptToUse = lastPromptValue;
-		if (retryCount === 0 && !promptToUse) {
-			const captured = capturePromptFromSite();
-			if (captured) {
-				promptToUse = captured;
-				updatePromptValue(captured);
-				console.log("[Grok Retry] Auto-captured prompt on first moderation");
-			}
+		if (promptSnapshot) {
+			sessionPromptRef.current = promptSnapshot;
 		}
-
-		// Mark failure detected and allow scheduler to perform the next retry
-		markFailureDetected();
 	}, [
 		isSessionActive,
 		lastAttemptTime,
@@ -141,14 +163,35 @@ const ImaginePostApp: React.FC = () => {
 		updatePromptValue,
 		endSession,
 		markFailureDetected,
+		recordPromptOutcome,
 	]);
 
-	const { rateLimitDetected } = useModerationDetector(handleModerationDetected, autoRetryEnabled);
+	const handleRateLimitDetected = React.useCallback(() => {
+		if (nextVideoTimeoutRef.current) {
+			clearTimeout(nextVideoTimeoutRef.current);
+			nextVideoTimeoutRef.current = null;
+		}
+
+		if (!isSessionActive) {
+			return;
+		}
+
+		console.warn("[Grok Retry] Cancelling session due to rate limit");
+		endSession("cancelled");
+		sessionPromptRef.current = null;
+	}, [isSessionActive, endSession]);
+
+	const { rateLimitDetected } = useModerationDetector({
+		onModerationDetected: handleModerationDetected,
+		onRateLimitDetected: handleRateLimitDetected,
+		enabled: autoRetryEnabled,
+	});
 
 	// Handle successful video generation
 	const handleSuccess = React.useCallback(() => {
 		console.log("[Grok Retry] Video generated successfully!");
 		incrementVideosGenerated();
+		recordPromptOutcome("success");
 
 		const newCount = videosGenerated + 1;
 
@@ -156,6 +199,7 @@ const ImaginePostApp: React.FC = () => {
 		if (newCount >= videoGoal) {
 			console.log(`[Grok Retry] Video goal reached! Generated ${newCount}/${videoGoal} videos`);
 			endSession("success");
+			sessionPromptRef.current = null;
 		} else {
 			// Continue generating - restart the cycle
 			console.log(`[Grok Retry] Progress: ${newCount}/${videoGoal} videos generated, continuing...`);
@@ -186,6 +230,7 @@ const ImaginePostApp: React.FC = () => {
 		isSessionActive,
 		clickMakeVideoButton,
 		lastPromptValue,
+		recordPromptOutcome,
 	]);
 
 	useSuccessDetector(handleSuccess, isSessionActive);
@@ -263,6 +308,12 @@ const ImaginePostApp: React.FC = () => {
 		lastSessionOutcome
 	);
 
+	React.useEffect(() => {
+		if (!isSessionActive) {
+			sessionPromptRef.current = null;
+		}
+	}, [isSessionActive]);
+
 	// Auto-toggle debug panel based on session state and global settings preference
 	useEffect(() => {
 		if (globalSettingsLoading) {
@@ -323,9 +374,13 @@ const ImaginePostApp: React.FC = () => {
 		};
 	}, []);
 
-	const handlePromptChange = (value: string) => {
-		updatePromptValue(value);
-	};
+	const handlePromptChange = React.useCallback(
+		(value: string) => {
+			sessionPromptRef.current = value;
+			updatePromptValue(value);
+		},
+		[updatePromptValue]
+	);
 
 	const handleCopyFromSite = () => {
 		const value = capturePromptFromSite();
@@ -365,6 +420,8 @@ const ImaginePostApp: React.FC = () => {
 			}
 		}
 
+		sessionPromptRef.current = promptToUse ?? null;
+
 		startSession();
 		// Allow the initial manual click to proceed even before any failure notice
 		clickMakeVideoButton(promptToUse, { overridePermit: true });
@@ -378,6 +435,7 @@ const ImaginePostApp: React.FC = () => {
 			console.log("[Grok Retry] Cleared pending next video timeout");
 		}
 		endSession("cancelled");
+		sessionPromptRef.current = null;
 	};
 
 	const handleMinimizeClick = () => {
@@ -447,6 +505,8 @@ const ImaginePostApp: React.FC = () => {
 					showResults={showResults}
 					setShowResults={setShowResults}
 					lastSessionSummary={lastSessionSummary}
+					promptHistoryRecords={promptHistoryRecords}
+					muteControl={muteControl}
 				/>
 				<GlobalSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 			</TooltipProvider>

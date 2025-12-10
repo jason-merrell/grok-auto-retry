@@ -1,6 +1,6 @@
 {
   "name": "grok-retry-extension",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Chrome extension for auto-retrying Grok moderation with React and Shadcn UI",
   "type": "module",
   "scripts": {
@@ -18,6 +18,7 @@
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
@@ -25,10 +26,12 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "@radix-ui/react-scroll-area": "^1.0.5",
     "lucide-react": "^0.462.0",
-    "recharts": "^3.5.1",
+    "nanoid": "^5.0.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "recharts": "^3.5.1",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7"
   },

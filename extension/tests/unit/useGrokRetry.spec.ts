@@ -131,24 +131,26 @@ describe('useGrokRetry guards', () => {
             if (progressNode) {
                 progressNode.textContent = value;
             }
+            let reportedLayer: 1 | 2 | 3 | null = null;
             act(() => {
-                result.current.markFailureDetected();
+                reportedLayer = result.current.markFailureDetected();
             });
+            return reportedLayer;
         };
 
-        setAndMark('10%');
+        expect(setAndMark('10%')).toBe(1);
         expect(result.current.layer1Failures).toBe(1);
         expect(result.current.layer2Failures).toBe(0);
         expect(result.current.layer3Failures).toBe(0);
         expect(result.current.creditsUsed).toBe(0);
 
-        setAndMark('52%');
+        expect(setAndMark('52%')).toBe(2);
         expect(result.current.layer1Failures).toBe(1);
         expect(result.current.layer2Failures).toBe(1);
         expect(result.current.layer3Failures).toBe(0);
         expect(result.current.creditsUsed).toBe(0);
 
-        setAndMark('95%');
+        expect(setAndMark('95%')).toBe(3);
         expect(result.current.layer1Failures).toBe(1);
         expect(result.current.layer2Failures).toBe(1);
         expect(result.current.layer3Failures).toBe(1);

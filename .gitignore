@@ -7,7 +7,7 @@ dist.**
 *.log
 .DS_Store
 docs/eval**
-.scratch/**
+**.scratch**
 .env**
 *.crx
 *.pem

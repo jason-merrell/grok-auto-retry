@@ -3,14 +3,20 @@ import { selectors } from '../config/selectors';
 
 const MODERATION_TEXT = "Content Moderated. Try a different idea.";
 const RATE_LIMIT_TEXT = "Rate limit reached";
-const RATE_LIMIT_WAIT_TIME = 60000; // 60 seconds
 const MODERATION_TRIGGER_COOLDOWN_MS = 5000; // hard guard between callbacks
 const MODERATION_HOLD_MS = 2000; // keep detected state for stability
 
-export const useModerationDetector = (
-    onModerationDetected: () => void,
-    enabled: boolean
-) => {
+interface ModerationDetectorOptions {
+    onModerationDetected: () => void;
+    onRateLimitDetected?: () => void;
+    enabled: boolean;
+}
+
+export const useModerationDetector = ({
+    onModerationDetected,
+    onRateLimitDetected,
+    enabled,
+}: ModerationDetectorOptions) => {
     const [moderationDetected, setModerationDetected] = useState(false);
     const [rateLimitDetected, setRateLimitDetected] = useState(false);
     const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -90,34 +96,21 @@ export const useModerationDetector = (
 
         // Handle rate limit detection
         if (isRateLimitDetected && !rateLimitDetected) {
-            // Don't schedule a new timeout if one is already pending
             if (debounceTimeout) {
-                return; // Already processing rate limit
+                clearTimeout(debounceTimeout);
+                setDebounceTimeout(null);
             }
 
             setRateLimitDetected(true);
-
-            // Wait 60 seconds before retrying
-            const timeout = setTimeout(() => {
-                console.log('[Grok Retry] Rate limit detected, waiting 60s before retry...');
-
-                // Schedule retry after 60 seconds
-                setTimeout(() => {
-                    console.log('[Grok Retry] Rate limit cooldown complete, retrying...');
-                    onModerationDetected();
-                    setRateLimitDetected(false);
-                    setDebounceTimeout(null);
-                }, RATE_LIMIT_WAIT_TIME);
-            }, 100);
-
-            setDebounceTimeout(timeout);
-        } else if (!isRateLimitDetected && rateLimitDetected && debounceTimeout === null) {
-            // Only clear if we're not in a scheduled retry
+            console.warn('[Grok Retry] Rate limit detected — cancelling active sessions');
+            try { (window as any).__grok_append_log?.('Rate limit detected — cancelling active sessions. Please wait before retrying.', 'warn'); } catch { }
+            onRateLimitDetected?.();
+        } else if (!isRateLimitDetected && rateLimitDetected) {
             setRateLimitDetected(false);
         }
 
         return isModerationDetected || isRateLimitDetected;
-    }, [moderationDetected, rateLimitDetected, onModerationDetected, debounceTimeout]);
+    }, [moderationDetected, rateLimitDetected, onModerationDetected, onRateLimitDetected, debounceTimeout]);
 
     useEffect(() => {
         if (!enabled) return;
