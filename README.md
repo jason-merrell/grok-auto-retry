@@ -9,13 +9,15 @@ A TypeScript-based Chrome extension that automatically retries video generation 
 - 🖼️ Image generation panel for `/imagine` routes with one-click generation
 - ⚙️ Global settings sheet - configure defaults, timing, UI preferences, and advanced options that sync across devices
 - 💾 Saved prompts - save, load, rename, and manage your favorite prompts globally
+- 📚 Prompt history with search, sorting, retention limits, and hover previews
 - 📝 Prompt preservation and quick-add prompt partials with categories
 - 🔄 Real-time progress in browser tab title with completion status
 - 🎨 Resizable, draggable UI panel with fullscreen maximize mode
 - 📊 Dynamic progress badges with color-coded status
 - 🧭 Results summary with moderation layer explainer and mitigation tips
 - 🐛 Debug panel with real-time session logs and color-coded severity levels
-- ⚠️ Rapid failure detection warns of immediate automated content checks
+- ⚠️ Failure tracking highlights rapid blocks and layer-level moderation details
+- ⏳ Rate limit protection with configurable cooldown and automatic session cancelation
 - 💚 Visual session indicator with pulsing active badge
 - 🔒 Hybrid storage - persistent preferences, session-aware state
 - 📦 Built with TypeScript and React for type safety and modern UI
