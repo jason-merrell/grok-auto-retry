@@ -1,5 +1,7 @@
 # Grok Auto Retry Extension
 
+![Grok Auto Retry Extension](docs/images/screenshot.png)
+
 A TypeScript-based Chrome extension that automatically retries video generation on Grok.com when content moderation occurs.
 
 ## Features

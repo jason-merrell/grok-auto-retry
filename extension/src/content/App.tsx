@@ -18,6 +18,7 @@ import { ControlPanel } from "@/components/ControlPanel";
 import { MiniToggle } from "@/components/MiniToggle";
 import { ImaginePanel } from "@/components/ImaginePanel";
 import { GlobalSettingsDialog } from "@/components/GlobalSettingsDialog";
+import { Toaster } from "@/components/ui/toaster";
 
 const ImaginePostApp: React.FC = () => {
 	// Only show on /imagine/post/* routes
@@ -409,7 +410,7 @@ const ImaginePostApp: React.FC = () => {
 		handlePromptChange(newPrompt);
 	};
 
-	const handleGenerateVideo = () => {
+	const handleGenerateVideo = React.useCallback(() => {
 		// Capture prompt if not already captured
 		let promptToUse = lastPromptValue;
 		if (!promptToUse) {
@@ -425,9 +426,9 @@ const ImaginePostApp: React.FC = () => {
 		startSession();
 		// Allow the initial manual click to proceed even before any failure notice
 		clickMakeVideoButton(promptToUse, { overridePermit: true });
-	};
+	}, [capturePromptFromSite, clickMakeVideoButton, lastPromptValue, startSession, updatePromptValue]);
 
-	const handleCancelSession = () => {
+	const handleCancelSession = React.useCallback(() => {
 		// Clear any pending next video timeout
 		if (nextVideoTimeoutRef.current) {
 			clearTimeout(nextVideoTimeoutRef.current);
@@ -436,17 +437,21 @@ const ImaginePostApp: React.FC = () => {
 		}
 		endSession("cancelled");
 		sessionPromptRef.current = null;
-	};
+	}, [endSession]);
 
-	const handleMinimizeClick = () => {
+	const toggleMinimized = React.useCallback(() => {
+		saveUIPref("isMinimized", !uiPrefs.isMinimized);
+	}, [saveUIPref, uiPrefs.isMinimized]);
+
+	const handleMinimizeClick = React.useCallback(() => {
 		if (!miniDrag.dragMoved) {
-			saveUIPref("isMinimized", !uiPrefs.isMinimized);
+			toggleMinimized();
 		}
-	};
+	}, [miniDrag.dragMoved, toggleMinimized]);
 
-	const handleMaximizeToggle = () => {
+	const handleMaximizeToggle = React.useCallback(() => {
 		saveUIPref("isMaximized", !uiPrefs.isMaximized);
-	};
+	}, [saveUIPref, uiPrefs.isMaximized]);
 
 	// Don't render if not on imagine/post route
 	if (!isImaginePostRoute) {
@@ -594,11 +599,15 @@ const ImagineRootApp: React.FC = () => {
 		}
 	}, [copyPromptToSite, promptValue]);
 
+	const toggleMinimized = React.useCallback(() => {
+		saveUIPref("isMinimized", !uiPrefs.isMinimized);
+	}, [saveUIPref, uiPrefs.isMinimized]);
+
 	const handleMinimizeClick = React.useCallback(() => {
 		if (!miniDrag.dragMoved) {
-			saveUIPref("isMinimized", !uiPrefs.isMinimized);
+			toggleMinimized();
 		}
-	}, [miniDrag.dragMoved, saveUIPref, uiPrefs.isMinimized]);
+	}, [miniDrag.dragMoved, toggleMinimized]);
 
 	const handleMaximizeToggle = React.useCallback(() => {
 		saveUIPref("isMaximized", !uiPrefs.isMaximized);
@@ -649,15 +658,24 @@ const App: React.FC = () => {
 	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
 	const isImagineRootRoute = useRouteMatch("^/imagine/?$");
 
+	let content: React.ReactNode = null;
+
 	if (isImaginePostRoute) {
-		return <ImaginePostApp />;
+		content = <ImaginePostApp />;
+	} else if (isImagineRootRoute) {
+		content = <ImagineRootApp />;
 	}
 
-	if (isImagineRootRoute) {
-		return <ImagineRootApp />;
+	if (!content) {
+		return null;
 	}
 
-	return null;
+	return (
+		<>
+			{content}
+			<Toaster />
+		</>
+	);
 };
 
 export default App;

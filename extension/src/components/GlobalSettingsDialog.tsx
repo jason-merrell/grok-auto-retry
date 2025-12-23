@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Download, Upload, RotateCcw, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { Download, Upload, RotateCcw, AlertTriangle } from "lucide-react";
 
 interface GlobalSettingsDialogProps {
 	open: boolean;
@@ -15,14 +16,11 @@ interface GlobalSettingsDialogProps {
 
 export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open, onOpenChange }) => {
 	const { settings, isLoading, saveSetting, resetToDefaults, exportSettings, importSettings } = useGlobalSettings();
-
-	const [saveStatus, setSaveStatus] = useState<string>("");
-	const [importError, setImportError] = useState<string>("");
+	const { toast } = useToast();
 	const [activeTab, setActiveTab] = useState<"defaults" | "timing" | "ui" | "advanced">("defaults");
 
 	const showSaveStatus = (message: string) => {
-		setSaveStatus(message);
-		setTimeout(() => setSaveStatus(""), 2000);
+		toast({ description: message, duration: 2500, variant: "success" });
 	};
 
 	const handleExport = () => {
@@ -45,13 +43,12 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 			const file = (e.target as HTMLInputElement).files?.[0];
 			if (file) {
 				const reader = new FileReader();
-				reader.onload = (e) => {
-					const result = importSettings(e.target?.result as string);
+				reader.onload = (event) => {
+					const result = importSettings(event.target?.result as string);
 					if (result.success) {
-						setImportError("");
 						showSaveStatus("Settings imported successfully");
 					} else {
-						setImportError(result.error || "Import failed");
+						toast({ description: result.error || "Import failed", variant: "destructive" });
 					}
 				};
 				reader.readAsText(file);
@@ -82,19 +79,6 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 					<SheetTitle className="text-card-foreground">Global Settings</SheetTitle>
 					<SheetDescription>Configure defaults and preferences that sync across devices</SheetDescription>
 				</SheetHeader>
-
-				{saveStatus && (
-					<div className="mt-4 p-2 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-2 text-green-600">
-						<CheckCircle2 className="h-3 w-3" />
-						<span className="text-xs">{saveStatus}</span>
-					</div>
-				)}
-
-				{importError && (
-					<div className="mt-4 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-600">
-						<span className="text-xs">{importError}</span>
-					</div>
-				)}
 
 				<div className="mt-6 space-y-6">
 					{/* Tab Navigation */}

@@ -1,6 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 
 // Global settings that apply as defaults across all posts/sessions
+export interface KeyboardShortcutSettings {
+    startStop: string;
+    muteUnmute: string;
+    toggleMinimize: string;
+    toggleFullscreen: string;
+    openSettings: string;
+}
+
 export interface GlobalSettings {
     // Default values for new posts
     defaultMaxRetries: number;
@@ -34,6 +42,8 @@ export interface GlobalSettings {
         promptTextarea?: string;
     };
 
+    keyboardShortcuts: KeyboardShortcutSettings;
+
     // Import/Export
     lastExportDate?: string;
 }
@@ -58,9 +68,29 @@ const clampPromptHistoryLimit = (value: unknown): number => {
     );
 };
 
+const DEFAULT_SHORTCUTS: KeyboardShortcutSettings = {
+    startStop: "Alt+Shift+S",
+    muteUnmute: "Alt+Shift+M",
+    toggleMinimize: "Alt+Shift+N",
+    toggleFullscreen: "Alt+Shift+F",
+    openSettings: "Alt+Shift+O",
+};
+
+const normalizeShortcuts = (shortcuts: GlobalSettings["keyboardShortcuts"] | undefined): KeyboardShortcutSettings => {
+    const source = shortcuts ?? DEFAULT_SHORTCUTS;
+    return {
+        startStop: typeof source.startStop === "string" ? source.startStop : DEFAULT_SHORTCUTS.startStop,
+        muteUnmute: typeof source.muteUnmute === "string" ? source.muteUnmute : DEFAULT_SHORTCUTS.muteUnmute,
+        toggleMinimize: typeof source.toggleMinimize === "string" ? source.toggleMinimize : DEFAULT_SHORTCUTS.toggleMinimize,
+        toggleFullscreen: typeof source.toggleFullscreen === "string" ? source.toggleFullscreen : DEFAULT_SHORTCUTS.toggleFullscreen,
+        openSettings: typeof source.openSettings === "string" ? source.openSettings : DEFAULT_SHORTCUTS.openSettings,
+    };
+};
+
 const normalizeSettings = (settings: GlobalSettings): GlobalSettings => ({
     ...settings,
     promptHistoryLimit: clampPromptHistoryLimit(settings.promptHistoryLimit),
+    keyboardShortcuts: normalizeShortcuts(settings.keyboardShortcuts),
 });
 
 const DEFAULT_SETTINGS: GlobalSettings = {
@@ -79,6 +109,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
     autoSwitchToDebug: false,
     autoSwitchToResultsOnComplete: false,
     customSelectors: undefined,
+    keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
 };
 
 const STORAGE_KEY = 'grokRetry_globalSettings';
