@@ -68,6 +68,11 @@ export const selectors = {
             ogImageMeta: 'meta[property="og:image"], meta[name="twitter:image"]',
             legacyVideo: customSelectors.videoElement || DEFAULT_VIDEO_ELEMENT,
             iconOnlyGenerateButton: customSelectors.makeVideoButton || DEFAULT_MAKE_VIDEO_BUTTON,
+            // New video history sidebar (appears after first video generation)
+            // Only count completed videos with actual thumbnails, not progress placeholders
+            videoHistorySidebar: '.absolute.top-0.w-fit button img[alt*="Thumbnail"][src*="grok.com"]',
+            videoHistoryActiveItem: '.absolute.top-0.w-fit button.ring-2.ring-white',
+            videoHistoryContainer: '.absolute.top-0.w-fit .flex.flex-col.overflow-y-auto',
         } as const;
     },
     get prompt() {

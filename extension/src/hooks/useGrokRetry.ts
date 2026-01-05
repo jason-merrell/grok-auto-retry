@@ -176,6 +176,17 @@ export const useGrokRetry = (postId: string | null) => {
 
     const startSession = useCallback(() => {
         resetProgressTracking();
+        // Set the session post ID to maintain continuity across route changes
+        const w = window as any;
+        if (postId) {
+            w.__grok_session_post_id = postId;
+            console.log(`[Grok Retry] Session started with post ID: ${postId}`);
+        }
+        // Clear video history tracking - don't count pre-existing videos in the sidebar
+        delete w.__grok_route_changed;
+        delete w.__grok_video_history_count;
+        delete w.__grok_last_success_attempt;
+        console.log('[Grok Retry] Cleared video history tracking for new session');
         // Clear logs and attempt history at the start of a new session for this post
         saveAll({
             isSessionActive: true,
@@ -190,10 +201,18 @@ export const useGrokRetry = (postId: string | null) => {
             lastSessionOutcome: 'pending',
             lastSessionSummary: null,
         });
-    }, [resetProgressTracking, saveAll]);
+    }, [resetProgressTracking, saveAll, postId]);
 
     const endSession = useCallback((outcome: SessionOutcome = 'idle') => {
         resetProgressTracking();
+        // Clear the session post ID when ending the session
+        const w = window as any;
+        delete w.__grok_session_post_id;
+        delete w.__grok_route_changed;
+        delete w.__grok_video_history_count;
+        delete w.__grok_last_success_attempt;
+        console.log(`[Grok Retry] Session ended with outcome: ${outcome}`);
+
         const summary: SessionSummary = {
             outcome,
             completedVideos: videosGenerated,
