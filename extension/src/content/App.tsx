@@ -423,7 +423,8 @@ const ImaginePostApp: React.FC = () => {
 
 		sessionPromptRef.current = promptToUse ?? null;
 
-		startSession();
+		// Pass the prompt directly to startSession to avoid reading stale state
+		startSession(promptToUse);
 		// Allow the initial manual click to proceed even before any failure notice
 		clickMakeVideoButton(promptToUse, { overridePermit: true });
 	}, [capturePromptFromSite, clickMakeVideoButton, lastPromptValue, startSession, updatePromptValue]);

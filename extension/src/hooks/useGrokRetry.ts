@@ -58,7 +58,16 @@ const parseProgress = (text?: string | null): number | null => {
 };
 
 export const useGrokRetry = (postId: string | null) => {
-    const { data: postData, save, saveAll, isLoading, appendLog } = usePostStorage(postId);
+    const { data: postData, save, saveAll, migrateState, isLoading, appendLog } = usePostStorage(postId);
+
+    // Expose migration function to window for usePostId to call
+    useEffect(() => {
+        const w = window as any;
+        w.__grok_migrate_state = migrateState;
+        return () => {
+            delete w.__grok_migrate_state;
+        };
+    }, [migrateState]);
 
     const [lastClickTime, setLastClickTime] = useState(0);
     const [originalPageTitle, setOriginalPageTitle] = useState('');
@@ -80,6 +89,7 @@ export const useGrokRetry = (postId: string | null) => {
     const lastPromptValue = postData.lastPromptValue;
     const isSessionActive = postData.isSessionActive;
     const videoGoal = postData.videoGoal;
+    const videoGroup = postData.videoGroup ?? [];
     const videosGenerated = postData.videosGenerated;
     const lastAttemptTime = postData.lastAttemptTime;
     const lastFailureTime = postData.lastFailureTime;
@@ -174,7 +184,7 @@ export const useGrokRetry = (postId: string | null) => {
         progressObserverRef.current = observer;
     }, []);
 
-    const startSession = useCallback(() => {
+    const startSession = useCallback((capturedPrompt?: string) => {
         resetProgressTracking();
         // Set the session post ID to maintain continuity across route changes
         const w = window as any;
@@ -187,8 +197,18 @@ export const useGrokRetry = (postId: string | null) => {
         delete w.__grok_video_history_count;
         delete w.__grok_last_success_attempt;
         console.log('[Grok Retry] Cleared video history tracking for new session');
-        // Clear logs and attempt history at the start of a new session for this post
+        // Use captured prompt if provided, otherwise fall back to lastPromptValue
+        const promptToSave = capturedPrompt ?? lastPromptValue;
+        console.log(`[Grok Retry] Starting session with prompt: ${promptToSave ? promptToSave.substring(0, 50) + '...' : '(empty)'}`);
+        // Initialize videoGroup with current post if not already present
+        const currentVideoGroup = Array.isArray(videoGroup) ? videoGroup : [];
+        const updatedVideoGroup = postId && !currentVideoGroup.includes(postId)
+            ? [postId, ...currentVideoGroup]
+            : currentVideoGroup;
+        // Save both session data AND persistent data to ensure continuity across route changes
+        // This prevents loss of prompt/settings when route changes after successful generation
         saveAll({
+            // Session data
             isSessionActive: true,
             retryCount: 0,
             videosGenerated: 0,
@@ -200,8 +220,14 @@ export const useGrokRetry = (postId: string | null) => {
             layer3Failures: 0,
             lastSessionOutcome: 'pending',
             lastSessionSummary: null,
+            // Persistent data - save current values to ensure they persist across route changes
+            maxRetries,
+            autoRetryEnabled,
+            lastPromptValue: promptToSave,
+            videoGoal,
+            videoGroup: updatedVideoGroup,
         });
-    }, [resetProgressTracking, saveAll, postId]);
+    }, [resetProgressTracking, saveAll, postId, maxRetries, autoRetryEnabled, lastPromptValue, videoGoal, videoGroup]);
 
     const endSession = useCallback((outcome: SessionOutcome = 'idle') => {
         resetProgressTracking();

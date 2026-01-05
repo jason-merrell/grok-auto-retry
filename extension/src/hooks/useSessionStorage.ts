@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 const TEST_BRIDGE_VERSION = 'storage-hook@1';
 
@@ -8,6 +8,7 @@ interface PersistentData {
     autoRetryEnabled: boolean;
     lastPromptValue: string;
     videoGoal: number;
+    videoGroup: string[]; // Array of related post IDs in this video generation session
 }
 
 export type SessionOutcome = 'idle' | 'pending' | 'success' | 'failure' | 'cancelled';
@@ -55,7 +56,7 @@ export interface PostData extends PersistentData, SessionData { }
 const PERSISTENT_STORAGE_PREFIX = 'grokRetryPost_';
 const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
 const GLOBAL_SETTINGS_KEY = 'grokRetry_globalSettings';
-const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal'];
+const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal', 'videoGroup'];
 const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs', 'attemptProgress', 'lastSessionOutcome', 'lastSessionSummary'];
 const SESSION_COUNTER_KEYS: (keyof SessionData)[] = ['creditsUsed', 'layer1Failures', 'layer2Failures', 'layer3Failures'];
 const ALL_SESSION_KEYS: (keyof SessionData)[] = [...SESSION_KEYS, ...SESSION_COUNTER_KEYS];
@@ -65,6 +66,7 @@ const createDefaultPostData = (): PostData => ({
     autoRetryEnabled: true,
     lastPromptValue: '',
     videoGoal: 1,
+    videoGroup: [],
     retryCount: 0,
     isSessionActive: false,
     videosGenerated: 0,
@@ -84,17 +86,28 @@ const createDefaultPostData = (): PostData => ({
 export const usePostStorage = (postId: string | null) => {
     const [data, setData] = useState<PostData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const lastLoadedPostIdRef = useRef<string | null>(null);
 
     // Load from both chrome.storage.local (persistent) and sessionStorage (session) when postId changes
     useEffect(() => {
         if (!postId) {
             setIsLoading(false);
+            lastLoadedPostIdRef.current = null;
             try {
                 (window as any).__grok_test = (window as any).__grok_test || {};
                 (window as any).__grok_test.__storageHydrated = true;
             } catch { }
             return;
         }
+
+        // Skip reload if we're already loaded for this postId
+        // This prevents race conditions during route changes when postId is maintained for continuity
+        if (lastLoadedPostIdRef.current === postId) {
+            console.log(`[Grok Retry] Skipping redundant reload for post: ${postId}`);
+            return;
+        }
+
+        console.log(`[Grok Retry] Loading storage for post: ${postId} (previous: ${lastLoadedPostIdRef.current})`);
 
         const persistentKey = `${PERSISTENT_STORAGE_PREFIX}${postId}`;
         const sessionKey = `${SESSION_STORAGE_PREFIX}${postId}`;
@@ -115,6 +128,7 @@ export const usePostStorage = (postId: string | null) => {
                 autoRetryEnabled: globalSettings.defaultAutoRetryEnabled ?? true,
                 lastPromptValue: '',
                 videoGoal: globalSettings.defaultVideoGoal ?? 1,
+                videoGroup: [],
             };
 
             const DEFAULT_SESSION_DATA: SessionData = {
@@ -151,6 +165,7 @@ export const usePostStorage = (postId: string | null) => {
 
                 const combined = { ...persistentData, ...sessionData };
                 setData(combined);
+                lastLoadedPostIdRef.current = postId; // Mark this postId as loaded
                 try {
                     const w: any = window;
                     w.__grok_activePostId = postId;
@@ -319,6 +334,57 @@ export const usePostStorage = (postId: string | null) => {
         }
     }, [postId, postData]);
 
+    // Migrate state from one post to another (used during route changes)
+    const migrateState = useCallback((fromPostId: string, toPostId: string) => {
+        console.log(`[Grok Retry] Migrating state from ${fromPostId} to ${toPostId}`);
+
+        // Load state from the old post
+        const fromPersistentKey = `${PERSISTENT_STORAGE_PREFIX}${fromPostId}`;
+        const fromSessionKey = `${SESSION_STORAGE_PREFIX}${fromPostId}`;
+
+        if (typeof chrome !== 'undefined' && chrome?.storage?.local) {
+            chrome.storage.local.get([fromPersistentKey], (result) => {
+                const persistentData = result[fromPersistentKey];
+                if (persistentData) {
+                    // Add the new post to the videoGroup if not already present
+                    const videoGroup = Array.isArray(persistentData.videoGroup) ? persistentData.videoGroup : [fromPostId];
+                    if (!videoGroup.includes(fromPostId)) {
+                        videoGroup.unshift(fromPostId); // Add original post at start if missing
+                    }
+                    if (!videoGroup.includes(toPostId)) {
+                        videoGroup.push(toPostId); // Add new post at end
+                    }
+
+                    // Copy to new post with updated videoGroup
+                    const toPersistentKey = `${PERSISTENT_STORAGE_PREFIX}${toPostId}`;
+                    const updatedData = { ...persistentData, videoGroup };
+                    chrome.storage.local.set({ [toPersistentKey]: updatedData }, () => {
+                        console.log('[Grok Retry] Migrated persistent data to new post with videoGroup:', videoGroup);
+                    });
+
+                    // Also update the original post's videoGroup to include the new post
+                    chrome.storage.local.set({ [fromPersistentKey]: { ...persistentData, videoGroup } }, () => {
+                        console.log('[Grok Retry] Updated original post videoGroup');
+                    });
+                }
+            });
+        }
+
+        try {
+            const sessionData = sessionStorage.getItem(fromSessionKey);
+            if (sessionData) {
+                const toSessionKey = `${SESSION_STORAGE_PREFIX}${toPostId}`;
+                sessionStorage.setItem(toSessionKey, sessionData);
+                console.log('[Grok Retry] Migrated session data to new post');
+
+                // Force a reload with the new post ID
+                lastLoadedPostIdRef.current = null;
+            }
+        } catch (error) {
+            console.error('[Grok Retry] Failed to migrate session storage:', error);
+        }
+    }, []);
+
     // Test bridge: expose methods that call the same storage helpers used in production
     useEffect(() => {
         try {
@@ -371,5 +437,5 @@ export const usePostStorage = (postId: string | null) => {
         } catch { }
     }, [applyUpdatesToId, postId, save]);
 
-    return { data: postData, save, saveAll: saveToPost, clear, isLoading, appendLog };
+    return { data: postData, save, saveAll: saveToPost, clear, migrateState, isLoading, appendLog };
 };
