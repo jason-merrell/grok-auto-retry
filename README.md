@@ -1,7 +1,5 @@
 # Grok Auto Retry Extension
 
-> ⚠️ **Breaking bug:** UI changes in Grok are preventing the extension's state management from working. Follow progress in [issue #30](https://github.com/jason-merrell/grok-auto-retry/issues/30).
-
 ![Grok Auto Retry Extension](docs/images/screenshot.png)
 
 A TypeScript-based Chrome extension that automatically retries video generation on Grok.com when content moderation occurs.
