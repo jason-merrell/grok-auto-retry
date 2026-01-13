@@ -20,7 +20,7 @@ describe('useGrokRetry guards', () => {
         const { useGrokRetry } = mod;
 
         const postId = 'post-1';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId: null }));
 
         // Start session and click immediately
         act(() => {
@@ -51,7 +51,7 @@ describe('useGrokRetry guards', () => {
         const { useGrokRetry } = mod;
 
         const postId = 'post-2';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId: null }));
 
         // Start session and make a click to set cooldown
         act(() => {
@@ -79,7 +79,7 @@ describe('useGrokRetry guards', () => {
         const { useGrokRetry } = mod;
 
         const postId = 'post-3';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId: null }));
 
         act(() => {
             result.current.startSession();
@@ -117,7 +117,7 @@ describe('useGrokRetry guards', () => {
         const { useGrokRetry } = mod;
 
         const postId = 'post-4';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId: null }));
 
         const progressButton = document.querySelector<HTMLButtonElement>('button[aria-label="Video Options"]');
         const progressNode = progressButton?.querySelector('div');
@@ -162,7 +162,7 @@ describe('useGrokRetry guards', () => {
         const { useGrokRetry } = mod;
 
         const postId = 'post-5';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId: null }));
 
         act(() => {
             result.current.startSession();
@@ -202,7 +202,7 @@ describe('useGrokRetry guards', () => {
         const clickSpy = vi.spyOn(HTMLButtonElement.prototype, 'click');
 
         const postId = 'post-7';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId: null }));
 
         act(() => {
             result.current.startSession();
@@ -222,12 +222,29 @@ describe('useGrokRetry guards', () => {
         clickSpy.mockRestore();
     });
 
+    it('records attempt timestamps keyed by mediaId', async () => {
+        const mod = await import('../../src/hooks/useGrokRetry');
+        const { useGrokRetry } = mod;
+
+        const postId = 'post-media-1';
+        const mediaId = 'media-key-1';
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId }));
+
+        act(() => {
+            result.current.startSession();
+            result.current.clickMakeVideoButton('media keyed', { overridePermit: true });
+        });
+
+        const attempts = (window as any).__grok_attempts as Record<string, number> | undefined;
+        expect(attempts?.[mediaId]).toBeGreaterThan(0);
+    });
+
     it('does not attempt a new click when the video goal is reached', async () => {
         const mod = await import('../../src/hooks/useGrokRetry');
         const { useGrokRetry } = mod;
 
         const postId = 'post-6';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId: null }));
 
         const clickSpy = vi.spyOn(HTMLButtonElement.prototype, 'click');
 
@@ -250,38 +267,41 @@ describe('useGrokRetry guards', () => {
         clickSpy.mockRestore();
     });
 
-    // Skip these tests as they test session management features that work correctly in browser
-    // but are difficult to test in JSDOM environment
-    it.skip('sets session post ID when starting a session', async () => {
+    it('sets session identity when starting a session', async () => {
         const mod = await import('../../src/hooks/useGrokRetry');
         const { useGrokRetry } = mod;
 
         // Clear any leftover state
         delete (window as any).__grok_session_post_id;
+        delete (window as any).__grok_session_media_id;
 
         const postId = 'post-session-1';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const mediaId = 'media-session-1';
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId }));
 
         await act(async () => {
             await new Promise(resolve => setTimeout(resolve, 0));
         });
 
         expect((window as any).__grok_session_post_id).toBeUndefined();
+        expect((window as any).__grok_session_media_id).toBeUndefined();
 
         act(() => {
             result.current.startSession();
         });
 
         expect((window as any).__grok_session_post_id).toBe('post-session-1');
+        expect((window as any).__grok_session_media_id).toBe('media-session-1');
         expect(result.current.isSessionActive).toBe(true);
     });
 
-    it.skip('clears session tracking variables when ending a session', async () => {
+    it('clears session tracking variables when ending a session', async () => {
         const mod = await import('../../src/hooks/useGrokRetry');
         const { useGrokRetry } = mod;
 
         const postId = 'post-session-2';
-        const { result } = renderHook(() => useGrokRetry(postId));
+        const mediaId = 'media-session-2';
+        const { result } = renderHook(() => useGrokRetry({ postId, mediaId }));
 
         await act(async () => {
             await new Promise(resolve => setTimeout(resolve, 0));
@@ -293,6 +313,7 @@ describe('useGrokRetry guards', () => {
 
         // Set up tracking variables
         (window as any).__grok_session_post_id = 'post-session-2';
+        (window as any).__grok_session_media_id = 'media-session-2';
         (window as any).__grok_route_changed = { from: 'post-1', to: 'post-2', at: Date.now() };
         (window as any).__grok_video_history_count = 3;
 
@@ -301,6 +322,7 @@ describe('useGrokRetry guards', () => {
         });
 
         expect((window as any).__grok_session_post_id).toBeUndefined();
+        expect((window as any).__grok_session_media_id).toBeUndefined();
         expect((window as any).__grok_route_changed).toBeUndefined();
         expect((window as any).__grok_video_history_count).toBeUndefined();
         expect(result.current.isSessionActive).toBe(false);
@@ -311,7 +333,7 @@ describe('useGrokRetry guards', () => {
         const { useGrokRetry } = mod;
 
         const postId = 'post-bridge-1';
-        renderHook(() => useGrokRetry(postId));
+        renderHook(() => useGrokRetry({ postId, mediaId: null }));
 
         expect((window as any).__grok_test?.endSession).toBeDefined();
         expect(typeof (window as any).__grok_test?.endSession).toBe('function');

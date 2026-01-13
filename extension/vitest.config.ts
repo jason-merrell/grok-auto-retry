@@ -7,6 +7,7 @@ export default defineConfig({
     resolve: {
         alias: {
             '@': srcPath,
+            '@playwright/test': fileURLToPath(new URL('./tests/__mocks__/playwrightTestStub.ts', import.meta.url)),
         },
     },
     test: {

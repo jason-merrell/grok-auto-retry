@@ -23,13 +23,17 @@ import { Toaster } from "@/components/ui/toaster";
 const ImaginePostApp: React.FC = () => {
 	// Only show on /imagine/post/* routes
 	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
-	const postId = usePostId();
+	const { postId, mediaId } = usePostId();
 	const { settings: globalSettings, isLoading: globalSettingsLoading } = useGlobalSettings();
 	const muteControl = useMuteController(isImaginePostRoute);
 	// Provide a global append log helper used by detectors
 	useEffect(() => {
+		const sessionKey = mediaId ?? postId;
 		(window as any).__grok_append_log = (line: string, level: "info" | "warn" | "error" | "success" = "info") => {
-			const key = `grokRetrySession_${postId}`;
+			if (!sessionKey) {
+				return;
+			}
+			const key = `grokRetrySession_${sessionKey}`;
 			try {
 				const stored = sessionStorage.getItem(key);
 				const existing = stored ? JSON.parse(stored) : {};
@@ -37,7 +41,7 @@ const ImaginePostApp: React.FC = () => {
 				const next = [...logs, `${new Date().toLocaleTimeString()} — ${level.toUpperCase()} — ${line}`].slice(-200);
 				sessionStorage.setItem(key, JSON.stringify({ ...existing, logs: next }));
 				// Notify listeners for live updates with level
-				window.dispatchEvent(new CustomEvent("grok:log", { detail: { postId, line, level } }));
+				window.dispatchEvent(new CustomEvent("grok:log", { detail: { key: sessionKey, postId, line, level } }));
 			} catch {}
 		};
 		return () => {
@@ -45,9 +49,9 @@ const ImaginePostApp: React.FC = () => {
 				delete (window as any).__grok_append_log;
 			} catch {}
 		};
-	}, [postId]);
+	}, [postId, mediaId]);
 
-	const retry = useGrokRetry(postId);
+	const retry = useGrokRetry({ postId, mediaId });
 	const {
 		autoRetryEnabled,
 		retryCount,

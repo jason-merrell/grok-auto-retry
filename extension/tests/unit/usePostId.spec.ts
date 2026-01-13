@@ -38,7 +38,8 @@ describe.skip('usePostId', () => {
         // Wait for useEffect to run
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        expect(result.current).toBe('abc-123');
+        expect(result.current.postId).toBe('abc-123');
+        expect(result.current.mediaId).toBeNull();
     });
 
     it('returns null when not on a post route', async () => {
@@ -51,7 +52,8 @@ describe.skip('usePostId', () => {
 
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        expect(result.current).toBe(null);
+        expect(result.current.postId).toBeNull();
+        expect(result.current.mediaId).toBeNull();
     });
 
     it('uses forced post ID from __grok_test if available', async () => {
@@ -68,7 +70,7 @@ describe.skip('usePostId', () => {
 
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        expect(result.current).toBe('forced-post-id');
+        expect(result.current.postId).toBe('forced-post-id');
     });
 
     // These tests verify route change behavior that requires navigation events

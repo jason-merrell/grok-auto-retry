@@ -40,7 +40,7 @@ export const useRouteMatch = (pattern: string) => {
             handleNavigation();
         };
 
-        // Watch for DOM changes (fallback for unusual routing)
+        // Watch for DOM data attributes as a last resort when Grok swaps routes without navigation events.
         const observer = new MutationObserver(() => {
             checkRoute();
         });

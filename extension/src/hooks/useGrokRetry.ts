@@ -3,6 +3,7 @@ import { getGenerateButtonSelectors, getPromptSelectorCandidates } from '../conf
 import { findPromptInput, writePromptValue } from '../lib/promptInput';
 import { usePostStorage } from './useSessionStorage';
 import type { SessionOutcome, SessionSummary } from './useSessionStorage';
+import type { PostRouteIdentity } from './usePostId';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
 const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
@@ -57,8 +58,8 @@ const parseProgress = (text?: string | null): number | null => {
     return Math.min(100, Math.max(0, numeric));
 };
 
-export const useGrokRetry = (postId: string | null) => {
-    const { data: postData, save, saveAll, migrateState, isLoading, appendLog } = usePostStorage(postId);
+export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
+    const { data: postData, save, saveAll, migrateState, isLoading, appendLog } = usePostStorage(postId, mediaId);
 
     // Expose migration function to window for usePostId to call
     useEffect(() => {
@@ -99,6 +100,7 @@ export const useGrokRetry = (postId: string | null) => {
     const layer3Failures = postData.layer3Failures ?? 0;
     const lastSessionOutcome = postData.lastSessionOutcome;
     const lastSessionSummary = postData.lastSessionSummary;
+    const sessionKey = mediaId ?? postData.sessionMediaId ?? postId;
 
     try {
         const w = window as any;
@@ -108,6 +110,13 @@ export const useGrokRetry = (postId: string | null) => {
             canRetry: postData.canRetry,
         };
     } catch { }
+
+    useEffect(() => {
+        const canonicalMediaId = mediaId ?? postData.sessionMediaId ?? null;
+        if (postData.sessionMediaId !== canonicalMediaId) {
+            save('sessionMediaId', canonicalMediaId);
+        }
+    }, [mediaId, postData.sessionMediaId, save]);
 
     const setMaxRetries = useCallback((value: number) => {
         const clamped = Math.max(1, Math.min(50, value));
@@ -192,6 +201,12 @@ export const useGrokRetry = (postId: string | null) => {
             w.__grok_session_post_id = postId;
             console.log(`[Grok Retry] Session started with post ID: ${postId}`);
         }
+        if (mediaId) {
+            w.__grok_session_media_id = mediaId;
+            console.log(`[Grok Retry] Session keyed by media ID: ${mediaId}`);
+        } else {
+            delete w.__grok_session_media_id;
+        }
         // Clear video history tracking - don't count pre-existing videos in the sidebar
         delete w.__grok_route_changed;
         delete w.__grok_video_history_count;
@@ -220,6 +235,7 @@ export const useGrokRetry = (postId: string | null) => {
             layer3Failures: 0,
             lastSessionOutcome: 'pending',
             lastSessionSummary: null,
+            sessionMediaId: mediaId ?? null,
             // Persistent data - save current values to ensure they persist across route changes
             maxRetries,
             autoRetryEnabled,
@@ -227,13 +243,14 @@ export const useGrokRetry = (postId: string | null) => {
             videoGoal,
             videoGroup: updatedVideoGroup,
         });
-    }, [resetProgressTracking, saveAll, postId, maxRetries, autoRetryEnabled, lastPromptValue, videoGoal, videoGroup]);
+    }, [resetProgressTracking, saveAll, postId, mediaId, maxRetries, autoRetryEnabled, lastPromptValue, videoGoal, videoGroup]);
 
     const endSession = useCallback((outcome: SessionOutcome = 'idle') => {
         resetProgressTracking();
         // Clear the session post ID when ending the session
         const w = window as any;
         delete w.__grok_session_post_id;
+        delete w.__grok_session_media_id;
         delete w.__grok_route_changed;
         delete w.__grok_video_history_count;
         delete w.__grok_last_success_attempt;
@@ -261,6 +278,7 @@ export const useGrokRetry = (postId: string | null) => {
             layer3Failures: 0,
             lastSessionOutcome: outcome,
             lastSessionSummary: summary,
+            sessionMediaId: null,
         });
     }, [resetProgressTracking, saveAll, videosGenerated, videoGoal, retryCount, maxRetries, creditsUsed, layer1Failures, layer2Failures, layer3Failures]);
 
@@ -325,8 +343,10 @@ export const useGrokRetry = (postId: string | null) => {
             w.__grok_test.markFailureDetected = () => markFailureDetected();
             w.__grok_test.__retryBridgeVersion = 'grok-retry@1';
             w.__grok_test.__retryPostId = postId;
+            w.__grok_test.__retryMediaId = mediaId;
+            w.__grok_test.__retrySessionKey = sessionKey;
         } catch { }
-    }, [startSession, endSession, markFailureDetected, postId]);
+    }, [startSession, endSession, markFailureDetected, postId, mediaId, sessionKey]);
 
     // Click the "Make video" button with React-style value setting
     const clickMakeVideoButton = useCallback((promptValue?: string, options?: { overridePermit?: boolean }) => {
@@ -401,14 +421,11 @@ export const useGrokRetry = (postId: string | null) => {
 
         button.click();
         setLastClickTime(now);
-        // Expose last attempt per postId globally for detectors to correlate success across tabs
+        // Expose last attempt per session key globally for detectors to correlate success across tabs
         const w = window as any;
         w.__grok_attempts = w.__grok_attempts || {};
-        if (postId) {
-            w.__grok_attempts[postId] = now;
-        } else {
-            w.__grok_attempts['__unknown__'] = now;
-        }
+        const attemptKey = sessionKey ?? postId ?? '__unknown__';
+        w.__grok_attempts[attemptKey] = now;
 
         // Mark session as active; retry count is incremented by scheduler before click
         save('isSessionActive', true);
@@ -427,6 +444,7 @@ export const useGrokRetry = (postId: string | null) => {
         postData.videoGoal,
         postData.videosGenerated,
         postId,
+        sessionKey,
         appendLog,
         beginProgressTracking,
     ]);
@@ -440,6 +458,7 @@ export const useGrokRetry = (postId: string | null) => {
                 maxRetries,
                 isLoading,
                 hasPostId: !!postId,
+                sessionKey,
                 isSessionActive: postData.isSessionActive,
             };
         } catch { }

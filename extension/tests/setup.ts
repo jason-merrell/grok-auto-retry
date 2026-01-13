@@ -115,3 +115,33 @@ global.MutationObserver = global.MutationObserver || (MockMutationObserver as an
 // Enable fake timers by default in unit tests
 vi.useFakeTimers();
 
+// Guard against libraries that register a non-configurable Jest matcher symbol.
+// Vitest defines the same property and will throw if it cannot reconfigure it.
+const jestMatchersSymbol = Symbol.for('$$jest-matchers-object');
+const originalDefineProperty = Object.defineProperty;
+Object.defineProperty = function definePropertyPatched(target: any, property: PropertyKey, descriptor: PropertyDescriptor) {
+    if (property === jestMatchersSymbol && target === globalThis) {
+        try {
+            return originalDefineProperty.call(Object, target, property, descriptor);
+        } catch {
+            const existing = Object.getOwnPropertyDescriptor(target, property);
+            if (existing) {
+                return target;
+            }
+        }
+    }
+    return originalDefineProperty.call(Object, target, property, descriptor);
+};
+
+if (!Object.prototype.hasOwnProperty.call(globalThis, jestMatchersSymbol)) {
+    Object.defineProperty(globalThis, jestMatchersSymbol, {
+        configurable: true,
+        writable: true,
+        value: {
+            state: new WeakMap(),
+            matchers: Object.create(null),
+            customEqualityTesters: [],
+        },
+    });
+}
+

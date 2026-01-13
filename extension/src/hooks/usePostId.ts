@@ -1,4 +1,10 @@
 import { useState, useEffect } from 'react';
+import { findPrimaryMediaId } from '@/lib/utils';
+
+export interface PostRouteIdentity {
+    postId: string | null;
+    mediaId: string | null;
+}
 
 /**
  * Check if two posts are in the same video group by looking at stored videoGroup data
@@ -65,30 +71,41 @@ const isPostInSidebar = (postId: string): boolean => {
  * When a video is successfully generated, Grok's UI navigates to a new post route.
  * This hook detects route changes during active sessions and triggers state migration.
  */
-export const usePostId = (): string | null => {
-    const [postId, setPostId] = useState<string | null>(null);
+export const usePostId = (): PostRouteIdentity => {
+    const [identity, setIdentity] = useState<PostRouteIdentity>({ postId: null, mediaId: null });
+
+    const updateIdentity = (nextPostId: string | null, nextMediaId: string | null) => {
+        setIdentity((prev) => {
+            if (prev.postId === nextPostId && prev.mediaId === nextMediaId) {
+                return prev;
+            }
+            return { postId: nextPostId, mediaId: nextMediaId };
+        });
+    };
 
     useEffect(() => {
-        const extractPostId = () => {
+        const extractPostIdentity = () => {
             const forced = (window as any).__grok_test?.getForcedPostId?.();
             if (typeof forced === 'string' && forced.length > 0) {
-                if (forced !== postId) {
-                    setPostId(forced);
-                }
+                const forcedMediaId = findPrimaryMediaId();
+                updateIdentity(forced, forcedMediaId);
                 return;
             }
 
             const match = window.location.pathname.match(/^\/imagine\/post\/([a-f0-9-]+)/);
             const urlPostId = match ? match[1] : null;
+            const nextMediaId = findPrimaryMediaId();
 
             // Check if we have an active session stored
             const w = window as any;
             const sessionPostId = w.__grok_session_post_id as string | undefined;
             const isSessionActive = w.__grok_retryState?.isSessionActive ?? false;
+            const sessionMediaId = w.__grok_session_media_id as string | undefined;
 
             // If we have an active session and we're on a new post route,
             // check if this is a Grok-initiated navigation (success) or user-initiated (manual).
             if (isSessionActive && sessionPostId && urlPostId && urlPostId !== sessionPostId) {
+                const hasMatchingMediaId = Boolean(sessionMediaId && nextMediaId && sessionMediaId === nextMediaId);
                 // Check multiple signals to determine if posts are related:
                 // 1. Time-based: recent route change flag within 15 seconds
                 const routeChange = w.__grok_route_changed;
@@ -99,50 +116,148 @@ export const usePostId = (): string | null => {
                 // 2. Sidebar-based: old post appears in video history sidebar
                 const isInSameSidebarGroup = isPostInSidebar(sessionPostId);
 
-                // 3. Storage-based: check if posts are in the same videoGroup (async)
-                // This is a fallback in case we missed the initial detection
-                arePostsInSameGroup(sessionPostId, urlPostId).then(result => {
-                    if (result && !isRecentRouteChange && !isInSameSidebarGroup) {
-                        console.log(`[Grok Retry] Posts found in same videoGroup - late detection`);
-                        // If we missed the initial detection, trigger migration now
-                        if (w.__grok_migrate_state) {
-                            w.__grok_migrate_state(sessionPostId, urlPostId);
-                            w.__grok_session_post_id = urlPostId;
-                            if (urlPostId !== postId) {
-                                setPostId(urlPostId);
-                            }
-                        }
-                    }
+                console.log('[Grok Retry] Route change evaluation', {
+                    sessionPostId,
+                    nextUrlPostId: urlPostId,
+                    sessionMediaId,
+                    nextMediaId,
+                    hasMatchingMediaId,
+                    isRecentRouteChange,
+                    isInSameSidebarGroup,
+                    routeChange,
+                    pendingRouteEval: w.__grok_pending_route_eval ?? null,
                 });
 
+                // 3. Storage-based: check if posts are in the same videoGroup (async)
+                // This is a fallback in case we missed the initial detection
+                if (!hasMatchingMediaId) {
+                    arePostsInSameGroup(sessionPostId, urlPostId).then(result => {
+                        if (result && !isRecentRouteChange && !isInSameSidebarGroup) {
+                            console.log('[Grok Retry] Posts found in same videoGroup - late detection', {
+                                sessionPostId,
+                                nextUrlPostId: urlPostId,
+                                sessionMediaId,
+                                lateMediaId: w.__grok_session_media_id ?? null,
+                            });
+                            // If we missed the initial detection, trigger migration now
+                            if (w.__grok_migrate_state) {
+                                const lateMediaId = findPrimaryMediaId();
+                                w.__grok_migrate_state(sessionPostId, urlPostId, {
+                                    fromSessionKey: sessionMediaId ?? sessionPostId,
+                                    toSessionKey: lateMediaId ?? sessionMediaId ?? urlPostId,
+                                });
+                                w.__grok_session_post_id = urlPostId;
+                                w.__grok_session_media_id = lateMediaId ?? sessionMediaId ?? null;
+                                updateIdentity(urlPostId, lateMediaId ?? sessionMediaId ?? null);
+                            }
+                        }
+                    });
+                }
+
                 // If any signal indicates they're related, migrate state
-                if (isRecentRouteChange || isInSameSidebarGroup) {
+                if (isRecentRouteChange || isInSameSidebarGroup || hasMatchingMediaId) {
                     console.log(`[Grok Retry] Route changed during active session: ${sessionPostId} -> ${urlPostId}`);
                     if (isRecentRouteChange) console.log(`[Grok Retry] - Detected via route change flag`);
                     if (isInSameSidebarGroup) console.log(`[Grok Retry] - Old post found in sidebar`);
+                    if (hasMatchingMediaId) console.log(`[Grok Retry] - Stable media ID ${sessionMediaId}`);
                     console.log(`[Grok Retry] Will migrate state and use new post ID: ${urlPostId}`);
+
+                    delete w.__grok_pending_route_eval;
 
                     // Trigger migration from old post to new post
                     if (w.__grok_migrate_state) {
-                        w.__grok_migrate_state(sessionPostId, urlPostId);
+                        w.__grok_migrate_state(sessionPostId, urlPostId, {
+                            fromSessionKey: sessionMediaId ?? sessionPostId,
+                            toSessionKey: nextMediaId ?? sessionMediaId ?? urlPostId,
+                        });
                     }
 
                     // Update session tracking to use new post ID
                     w.__grok_session_post_id = urlPostId;
+                    w.__grok_session_media_id = nextMediaId ?? sessionMediaId ?? null;
 
                     // Clear route change flag
                     delete w.__grok_route_changed;
 
                     // Use the new URL post ID
-                    if (urlPostId !== postId) {
-                        setPostId(urlPostId);
-                    }
+                    updateIdentity(urlPostId, nextMediaId ?? sessionMediaId ?? null);
                     return;
                 }
 
                 // Otherwise, this is likely user-initiated navigation - end the session
-                console.log(`[Grok Retry] User navigated away from session post (${sessionPostId} -> ${urlPostId}). Ending session.`);
+                const pendingRouteEval = w.__grok_pending_route_eval as { from: string; to: string; firstSeen: number; forceMigrated?: boolean } | undefined;
+                if (!pendingRouteEval || pendingRouteEval.from !== sessionPostId || pendingRouteEval.to !== urlPostId) {
+                    w.__grok_pending_route_eval = { from: sessionPostId, to: urlPostId, firstSeen: Date.now(), forceMigrated: false };
+                    console.log('[Grok Retry] Deferring session end — waiting for additional route signals');
+                    window.setTimeout(() => {
+                        try {
+                            extractPostIdentity();
+                        } catch (err) {
+                            console.warn('[Grok Retry] Deferred route evaluation failed:', err);
+                        }
+                    }, 400);
+                    return;
+                }
+
+                const elapsedMs = Date.now() - pendingRouteEval.firstSeen;
+                const GRACE_MS = 5000;
+                if (elapsedMs < GRACE_MS) {
+                    console.log('[Grok Retry] Pending route change still within grace period', {
+                        sessionPostId,
+                        urlPostId,
+                        elapsedMs,
+                    });
+                    window.setTimeout(() => {
+                        try {
+                            extractPostIdentity();
+                        } catch (err) {
+                            console.warn('[Grok Retry] Deferred route evaluation failed:', err);
+                        }
+                    }, 400);
+                    return;
+                }
+
+                if (!pendingRouteEval.forceMigrated) {
+                    console.warn('[Grok Retry] Grace period elapsed — migrating without positive signals', {
+                        sessionPostId,
+                        urlPostId,
+                        sessionMediaId,
+                        nextMediaId,
+                    });
+
+                    if (w.__grok_migrate_state) {
+                        w.__grok_migrate_state(sessionPostId, urlPostId, {
+                            fromSessionKey: sessionMediaId ?? sessionPostId,
+                            toSessionKey: nextMediaId ?? sessionMediaId ?? urlPostId,
+                        });
+                    }
+
+                    w.__grok_session_post_id = urlPostId;
+                    w.__grok_session_media_id = nextMediaId ?? sessionMediaId ?? null;
+                    updateIdentity(urlPostId, nextMediaId ?? sessionMediaId ?? null);
+                    delete w.__grok_pending_route_eval;
+
+                    window.setTimeout(() => {
+                        try {
+                            extractPostIdentity();
+                        } catch (err) {
+                            console.warn('[Grok Retry] Post-migration route evaluation failed:', err);
+                        }
+                    }, 750);
+                    return;
+                }
+
+                console.warn('[Grok Retry] User navigation detected during session - ending session', {
+                    sessionPostId,
+                    urlPostId,
+                    sessionMediaId,
+                    nextMediaId,
+                    hasMatchingMediaId,
+                    isRecentRouteChange,
+                    isInSameSidebarGroup,
+                });
                 delete w.__grok_session_post_id;
+                delete w.__grok_session_media_id;
                 delete w.__grok_route_changed;
                 delete w.__grok_video_history_count;
                 delete w.__grok_last_success_attempt;
@@ -156,20 +271,24 @@ export const usePostId = (): string | null => {
             }
 
             // Normal case: use the URL post ID
-            if (urlPostId !== postId) {
-                setPostId(urlPostId);
-                // Update session post ID when it changes normally
+            if (urlPostId !== identity.postId) {
+                updateIdentity(urlPostId, nextMediaId ?? null);
                 if (urlPostId) {
                     w.__grok_session_post_id = urlPostId;
                 }
+            } else if (nextMediaId && identity.mediaId !== nextMediaId) {
+                updateIdentity(urlPostId, nextMediaId);
+            }
+            if (nextMediaId) {
+                w.__grok_session_media_id = nextMediaId;
             }
         };
 
         // Initial extraction
-        extractPostId();
+        extractPostIdentity();
 
         const handleNavigation = () => {
-            extractPostId();
+            extractPostIdentity();
         };
 
         // Try Navigation API first (modern browsers)
@@ -196,7 +315,7 @@ export const usePostId = (): string | null => {
 
         // Watch for DOM changes in main content area (fallback for unusual routing)
         const observer = new MutationObserver(() => {
-            extractPostId();
+            extractPostIdentity();
         });
 
         // Observe the entire document for attribute changes (some routers change data attributes)
@@ -215,7 +334,7 @@ export const usePostId = (): string | null => {
             history.replaceState = originalReplaceState;
             observer.disconnect();
         };
-    }, [postId]);
+    }, [identity.postId]);
 
-    return postId;
+    return identity;
 };
