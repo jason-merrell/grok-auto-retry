@@ -11,3 +11,4 @@ docs/eval**
 .env**
 *.crx
 *.pem
+**.pw**

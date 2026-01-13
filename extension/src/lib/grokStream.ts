@@ -388,13 +388,13 @@ async function processStreamingResponse(response: Response) {
 function shouldIntercept(input: RequestInfo | URL): string | null {
     try {
         if (typeof input === 'string') {
-            return input.includes('/rest/app-chat/conversations/new') ? input : null;
+            return (input.includes('/rest/app-chat/conversations/new') || input.includes('/rest/media/post/list')) ? input : null;
         }
         if (input instanceof URL) {
-            return input.href.includes('/rest/app-chat/conversations/new') ? input.href : null;
+            return (input.href.includes('/rest/app-chat/conversations/new') || input.href.includes('/rest/media/post/list')) ? input.href : null;
         }
         if (typeof Request !== 'undefined' && input instanceof Request) {
-            return input.url.includes('/rest/app-chat/conversations/new') ? input.url : null;
+            return (input.url.includes('/rest/app-chat/conversations/new') || input.url.includes('/rest/media/post/list')) ? input.url : null;
         }
     } catch {
         // ignore
@@ -416,13 +416,49 @@ export function installGrokStreamInterceptor() {
         try {
             const url = shouldIntercept(input);
             if (url && response?.body) {
-                processStreamingResponse(response.clone());
+                // For streaming responses (chat), process as stream
+                if (url.includes('/rest/app-chat/conversations/new')) {
+                    processStreamingResponse(response.clone());
+                }
+                // For media post list (video status polling), process as JSON
+                else if (url.includes('/rest/media/post/list')) {
+                    processMediaPostListResponse(response.clone());
+                }
             }
         } catch (error) {
             console.warn('[Grok Retry] Failed to intercept Grok stream:', error);
         }
         return response;
     };
+}
+
+async function processMediaPostListResponse(response: Response) {
+    try {
+        const data = await response.json();
+        if (data?.posts && Array.isArray(data.posts)) {
+            for (const post of data.posts) {
+                if (post.type === 'VIDEO' && post.postId) {
+                    const progress = post.metadata?.progress ?? (post.videoUrl ? 100 : 0);
+                    const moderated = post.moderated === true;
+                    recordVideoProgress({
+                        videoPostId: post.postId,
+                        videoId: post.videoId ?? post.postId,
+                        parentPostId: post.metadata?.parentPostId ?? null,
+                        prompt: post.metadata?.videoPrompt ?? null,
+                        imageReference: post.metadata?.imageReference ?? null,
+                        progress,
+                        moderated,
+                        mode: post.metadata?.mode ?? null,
+                        width: post.metadata?.width ?? null,
+                        height: post.metadata?.height ?? null,
+                        sideBySideIndex: post.metadata?.sideBySideIndex ?? null,
+                    });
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('[Grok Retry] Failed to process media post list response:', error);
+    }
 }
 
 export function subscribeGrokStream(listener: () => void) {

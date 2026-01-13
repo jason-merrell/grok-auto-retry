@@ -238,7 +238,9 @@ const ImaginePostApp: React.FC = () => {
 		recordPromptOutcome,
 	]);
 
-	useSuccessDetector(handleSuccess, isSessionActive);
+	// Keep success detector running while on imagine post page, not just when session is active
+	// This ensures we detect success even if session timeout occurs during video generation
+	useSuccessDetector(handleSuccess, !!postId);
 
 	// Auto-cancel interrupted sessions on mount (after refresh/navigation) - only once
 	useEffect(() => {
