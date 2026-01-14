@@ -194,6 +194,12 @@ const ImaginePostApp: React.FC = () => {
 
 	// Handle successful video generation
 	const handleSuccess = React.useCallback(() => {
+		// Only handle success if a session is active
+		if (!isSessionActive) {
+			console.log("[Grok Retry] Success detected but no active session - ignoring");
+			return;
+		}
+
 		console.log("[Grok Retry] Video generated successfully!");
 		incrementVideosGenerated();
 		recordPromptOutcome("success");
