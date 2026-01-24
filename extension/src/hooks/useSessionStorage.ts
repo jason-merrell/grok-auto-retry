@@ -9,6 +9,7 @@ interface PersistentData {
     lastPromptValue: string;
     videoGoal: number;
     videoGroup: string[]; // Array of related post IDs in this video generation session
+    promptQueue: string[]; // Queue of prompts to use for multiple videos
 }
 
 export type SessionOutcome = 'idle' | 'pending' | 'success' | 'failure' | 'cancelled';
@@ -49,6 +50,7 @@ interface SessionData {
     lastSessionOutcome: SessionOutcome;
     lastSessionSummary: SessionSummary | null;
     sessionMediaId: string | null;
+    currentPromptIndex: number; // Index of current prompt in the queue
 }
 
 // Combined interface for external API
@@ -57,8 +59,8 @@ export interface PostData extends PersistentData, SessionData { }
 const PERSISTENT_STORAGE_PREFIX = 'grokRetryPost_';
 const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
 const GLOBAL_SETTINGS_KEY = 'grokRetry_globalSettings';
-const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal', 'videoGroup'];
-const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs', 'attemptProgress', 'lastSessionOutcome', 'lastSessionSummary', 'sessionMediaId'];
+const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal', 'videoGroup', 'promptQueue'];
+const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs', 'attemptProgress', 'lastSessionOutcome', 'lastSessionSummary', 'sessionMediaId', 'currentPromptIndex'];
 const SESSION_COUNTER_KEYS: (keyof SessionData)[] = ['creditsUsed', 'layer1Failures', 'layer2Failures', 'layer3Failures'];
 const ALL_SESSION_KEYS: (keyof SessionData)[] = [...SESSION_KEYS, ...SESSION_COUNTER_KEYS];
 
@@ -68,6 +70,7 @@ const createDefaultPostData = (): PostData => ({
     lastPromptValue: '',
     videoGoal: 1,
     videoGroup: [],
+    promptQueue: [],
     retryCount: 0,
     isSessionActive: false,
     videosGenerated: 0,
@@ -83,6 +86,7 @@ const createDefaultPostData = (): PostData => ({
     lastSessionOutcome: 'idle',
     lastSessionSummary: null,
     sessionMediaId: null,
+    currentPromptIndex: 0,
 });
 
 export const usePostStorage = (postId: string | null, mediaId: string | null) => {
@@ -133,6 +137,7 @@ export const usePostStorage = (postId: string | null, mediaId: string | null) =>
                 lastPromptValue: '',
                 videoGoal: globalSettings.defaultVideoGoal ?? 1,
                 videoGroup: [],
+                promptQueue: [],
             };
 
             const DEFAULT_SESSION_DATA: SessionData = {
@@ -151,6 +156,7 @@ export const usePostStorage = (postId: string | null, mediaId: string | null) =>
                 lastSessionOutcome: 'idle',
                 lastSessionSummary: null,
                 sessionMediaId: null,
+                currentPromptIndex: 0,
             };
 
             // Load persistent data from chrome.storage.local
