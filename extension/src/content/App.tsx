@@ -77,6 +77,13 @@ const ImaginePostApp: React.FC = () => {
 		clearLogs,
 		lastSessionOutcome,
 		lastSessionSummary,
+		promptQueue,
+		currentPromptIndex,
+		addToPromptQueue,
+		removeFromPromptQueue,
+		updatePromptInQueue,
+		movePromptInQueue,
+		getCurrentPrompt,
 	} = retry;
 	const { data: uiPrefs, save: saveUIPref } = useStorage();
 	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
@@ -229,7 +236,9 @@ const ImaginePostApp: React.FC = () => {
 				}
 				// Do not reset retryCount; maxRetries applies to whole session
 				// Use overridePermit since this is a new video generation, not a retry
-				clickMakeVideoButton(lastPromptValue, { overridePermit: true });
+				const nextPrompt = getCurrentPrompt();
+				console.log(`[Grok Retry] Using prompt for next video: ${nextPrompt ? nextPrompt.substring(0, 50) + '...' : '(empty)'}`);
+				clickMakeVideoButton(nextPrompt, { overridePermit: true });
 				nextVideoTimeoutRef.current = null;
 			}, 8000);
 		}
@@ -240,7 +249,7 @@ const ImaginePostApp: React.FC = () => {
 		endSession,
 		isSessionActive,
 		clickMakeVideoButton,
-		lastPromptValue,
+		getCurrentPrompt,
 		recordPromptOutcome,
 	]);
 
@@ -502,6 +511,8 @@ const ImaginePostApp: React.FC = () => {
 					videosGenerated={videosGenerated}
 					promptValue={lastPromptValue}
 					isSessionActive={isSessionActive}
+					promptQueue={promptQueue}
+					currentPromptIndex={currentPromptIndex}
 					onResizeStart={panelResize.handleResizeStart}
 					onMinimize={() => saveUIPref("isMinimized", true)}
 					onMaximizeToggle={handleMaximizeToggle}
@@ -515,6 +526,10 @@ const ImaginePostApp: React.FC = () => {
 					onCopyToSite={handleCopyToSite}
 					onGenerateVideo={handleGenerateVideo}
 					onCancelSession={handleCancelSession}
+					onAddToPromptQueue={addToPromptQueue}
+					onRemoveFromPromptQueue={removeFromPromptQueue}
+					onUpdatePromptInQueue={updatePromptInQueue}
+					onMovePromptInQueue={movePromptInQueue}
 					logs={logs || []}
 					showDebug={showDebug}
 					setShowDebug={setShowDebug}

@@ -101,6 +101,8 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
     const lastSessionOutcome = postData.lastSessionOutcome;
     const lastSessionSummary = postData.lastSessionSummary;
     const sessionKey = mediaId ?? postData.sessionMediaId ?? postId;
+    const promptQueue = postData.promptQueue ?? [];
+    const currentPromptIndex = postData.currentPromptIndex ?? 0;
 
     try {
         const w = window as any;
@@ -144,6 +146,42 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         save('logs', []);
     }, [save]);
 
+    const setPromptQueue = useCallback((queue: string[]) => {
+        save('promptQueue', queue);
+    }, [save]);
+
+    const addToPromptQueue = useCallback((prompt: string) => {
+        const newQueue = [...promptQueue, prompt];
+        save('promptQueue', newQueue);
+    }, [save, promptQueue]);
+
+    const removeFromPromptQueue = useCallback((index: number) => {
+        const newQueue = promptQueue.filter((_, i) => i !== index);
+        save('promptQueue', newQueue);
+    }, [save, promptQueue]);
+
+    const updatePromptInQueue = useCallback((index: number, prompt: string) => {
+        const newQueue = [...promptQueue];
+        newQueue[index] = prompt;
+        save('promptQueue', newQueue);
+    }, [save, promptQueue]);
+
+    const movePromptInQueue = useCallback((fromIndex: number, toIndex: number) => {
+        const newQueue = [...promptQueue];
+        const [removed] = newQueue.splice(fromIndex, 1);
+        newQueue.splice(toIndex, 0, removed);
+        save('promptQueue', newQueue);
+    }, [save, promptQueue]);
+
+    const getCurrentPrompt = useCallback((): string => {
+        if (promptQueue.length === 0) {
+            return lastPromptValue;
+        }
+        // Use currentPromptIndex to get the current prompt from the queue
+        const index = Math.min(currentPromptIndex, promptQueue.length - 1);
+        return promptQueue[index] || lastPromptValue;
+    }, [promptQueue, currentPromptIndex, lastPromptValue]);
+
     const resetProgressTracking = useCallback(() => {
         if (progressObserverRef.current) {
             progressObserverRef.current.disconnect();
@@ -154,11 +192,18 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
 
     const incrementVideosGenerated = useCallback(() => {
         resetProgressTracking();
-        saveAll({
+        const updates: Partial<typeof postData> = {
             videosGenerated: videosGenerated + 1,
             creditsUsed: creditsUsed + 1,
-        });
-    }, [resetProgressTracking, saveAll, videosGenerated, creditsUsed]);
+        };
+        // If we have a prompt queue and more videos to generate, move to next prompt
+        if (promptQueue.length > 0 && videosGenerated + 1 < videoGoal) {
+            updates.currentPromptIndex = Math.min(currentPromptIndex + 1, promptQueue.length - 1);
+            // Also update retryCount to 0 for the new prompt
+            updates.retryCount = 0;
+        }
+        saveAll(updates);
+    }, [resetProgressTracking, saveAll, videosGenerated, creditsUsed, promptQueue, videoGoal, currentPromptIndex]);
 
     const resetVideosGenerated = useCallback(() => {
         saveAll({ videosGenerated: 0 });
@@ -236,6 +281,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             lastSessionOutcome: 'pending',
             lastSessionSummary: null,
             sessionMediaId: mediaId ?? null,
+            currentPromptIndex: 0,
             // Persistent data - save current values to ensure they persist across route changes
             maxRetries,
             autoRetryEnabled,
@@ -586,6 +632,8 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         lastSessionOutcome,
         lastSessionSummary,
         isLoading,
+        promptQueue,
+        currentPromptIndex,
 
         // Actions
         setMaxRetries,
@@ -600,6 +648,12 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         resetVideosGenerated,
         markFailureDetected,
         clearLogs,
+        setPromptQueue,
+        addToPromptQueue,
+        removeFromPromptQueue,
+        updatePromptInQueue,
+        movePromptInQueue,
+        getCurrentPrompt,
     }), [
         postData.retryCount,
         maxRetries,
@@ -621,6 +675,8 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         lastSessionOutcome,
         lastSessionSummary,
         isLoading,
+        promptQueue,
+        currentPromptIndex,
         setMaxRetries,
         setAutoRetryEnabled,
         updatePromptValue,
@@ -633,5 +689,11 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         resetVideosGenerated,
         markFailureDetected,
         clearLogs,
+        setPromptQueue,
+        addToPromptQueue,
+        removeFromPromptQueue,
+        updatePromptInQueue,
+        movePromptInQueue,
+        getCurrentPrompt,
     ]);
 };
