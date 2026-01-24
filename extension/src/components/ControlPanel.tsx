@@ -21,6 +21,7 @@ import { MaxRetriesControls } from "./MaxRetriesControls";
 import { VideoGoalControls } from "./VideoGoalControls";
 import { PromptTextarea } from "./PromptTextarea";
 import { PromptPartials } from "./PromptPartials";
+import { PromptQueue } from "./PromptQueue";
 import { ActionButton } from "./ActionButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PromptHistoryRecord } from "@/hooks/usePromptHistory";
@@ -50,6 +51,8 @@ interface ControlPanelProps {
 	videosGenerated: number;
 	promptValue: string;
 	isSessionActive: boolean;
+	promptQueue: string[];
+	currentPromptIndex: number;
 	onResizeStart: (e: React.MouseEvent) => void;
 	onMinimize: () => void;
 	onMaximizeToggle: () => void;
@@ -63,6 +66,10 @@ interface ControlPanelProps {
 	onCopyToSite: () => void;
 	onGenerateVideo: () => void;
 	onCancelSession: () => void;
+	onAddToPromptQueue: (prompt: string) => void;
+	onRemoveFromPromptQueue: (index: number) => void;
+	onUpdatePromptInQueue: (index: number, prompt: string) => void;
+	onMovePromptInQueue: (fromIndex: number, toIndex: number) => void;
 	logs?: string[];
 	showDebug: boolean;
 	setShowDebug: (value: boolean) => void;
@@ -91,6 +98,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 	videosGenerated,
 	promptValue,
 	isSessionActive,
+	promptQueue,
+	currentPromptIndex,
 	onResizeStart,
 	onMinimize,
 	onMaximizeToggle,
@@ -104,6 +113,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 	onCopyToSite,
 	onGenerateVideo,
 	onCancelSession,
+	onAddToPromptQueue,
+	onRemoveFromPromptQueue,
+	onUpdatePromptInQueue,
+	onMovePromptInQueue,
 	logs = [],
 	showDebug,
 	setShowDebug,
@@ -572,6 +585,17 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 				/>
 
 				<PromptPartials onAppendPartial={onPromptAppend} disabled={!autoRetryEnabled} />
+
+				<PromptQueue
+					promptQueue={promptQueue}
+					currentPromptIndex={currentPromptIndex}
+					isSessionActive={isSessionActive}
+					disabled={isSessionActive}
+					onAddPrompt={onAddToPromptQueue}
+					onRemovePrompt={onRemoveFromPromptQueue}
+					onUpdatePrompt={onUpdatePromptInQueue}
+					onMovePrompt={onMovePromptInQueue}
+				/>
 			</div>
 		);
 	}
