@@ -539,6 +539,58 @@ export function ingestGrokStreamPayload(payload: unknown) {
     processParsedPayload(payload);
 }
 
+/**
+ * Clear all video attempts that match the given imageReference (mediaId)
+ * This is used when a session ends to clean up all related video generation attempts
+ */
+export function clearVideoAttemptsByImageReference(imageReference: string | null) {
+    if (!imageReference) {
+        return;
+    }
+
+    const videosToRemove: string[] = [];
+    const parentsToUpdate: Record<string, ParentSessionState> = {};
+
+    // Find all videos with matching imageReference
+    for (const [videoPostId, attempt] of Object.entries(snapshot.videos)) {
+        if (attempt.imageReference === imageReference) {
+            videosToRemove.push(videoPostId);
+            console.log(`[Grok Retry] Clearing video attempt ${videoPostId} for image ${imageReference}`);
+        }
+    }
+
+    if (videosToRemove.length === 0) {
+        return;
+    }
+
+    // Create updated videos object without the removed attempts
+    const updatedVideos = { ...snapshot.videos };
+    for (const videoPostId of videosToRemove) {
+        delete updatedVideos[videoPostId];
+    }
+
+    // Update parent sessions to remove references to cleared attempts
+    for (const [parentId, parent] of Object.entries(snapshot.parents)) {
+        const filteredAttempts = parent.attempts.filter(id => !videosToRemove.includes(id));
+        if (filteredAttempts.length !== parent.attempts.length) {
+            parentsToUpdate[parentId] = {
+                ...parent,
+                attempts: filteredAttempts,
+                lastUpdate: Date.now(),
+            };
+        }
+    }
+
+    mutateState(() => ({
+        videos: updatedVideos,
+        parents: Object.keys(parentsToUpdate).length > 0
+            ? { ...snapshot.parents, ...parentsToUpdate }
+            : snapshot.parents,
+    }));
+
+    console.log(`[Grok Retry] Cleared ${videosToRemove.length} video attempts for image ${imageReference}`);
+}
+
 export function resetGrokStreamStateForTests() {
     snapshot = {
         version: 0,
