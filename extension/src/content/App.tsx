@@ -14,6 +14,7 @@ import { useGlobalSettings } from "@/hooks/useGlobalSettings";
 import usePromptHistory from "@/hooks/usePromptHistory";
 import { useMuteController } from "@/hooks/useMuteController";
 import type { PromptHistoryLayer } from "@/lib/promptHistory";
+import { writePromptValue } from "@/lib/promptInput";
 import { ControlPanel } from "@/components/ControlPanel";
 import { MiniToggle } from "@/components/MiniToggle";
 import { ImaginePanel } from "@/components/ImaginePanel";
@@ -90,6 +91,14 @@ const ImaginePostApp: React.FC = () => {
 	const [showResults, setShowResults] = React.useState(false);
 	const lastSummarySignatureRef = React.useRef<string | null>(null);
 	const sessionPromptRef = React.useRef<string | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		processPendingInlinePrompt(() => cancelled);
+		return () => {
+			cancelled = true;
+		};
+	}, [postId, mediaId]);
 
 	const recordPromptOutcome = React.useCallback(
 		(status: "success" | "failure", layer?: PromptHistoryLayer | null) => {
@@ -532,6 +541,159 @@ const ImaginePostApp: React.FC = () => {
 	);
 };
 
+const PENDING_INLINE_PROMPT_KEY = "grokRetry_pendingInlinePrompt";
+const MAX_PENDING_INLINE_AGE_MS = 30000;
+
+const delay = (ms: number) =>
+	new Promise<void>((resolve) => {
+		setTimeout(resolve, ms);
+	});
+
+const normalizePrompt = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
+
+const clearPendingInlinePrompt = () => {
+	try {
+		sessionStorage.removeItem(PENDING_INLINE_PROMPT_KEY);
+	} catch {}
+};
+
+const enqueuePendingInlinePrompt = (value: string) => {
+	try {
+		console.warn("[Grok Retry] Queueing prompt for inline retry after navigation");
+		sessionStorage.setItem(PENDING_INLINE_PROMPT_KEY, JSON.stringify({ prompt: value, createdAt: Date.now() }));
+	} catch {}
+};
+
+const getPendingInlinePrompt = (): { prompt: string; createdAt?: number } | null => {
+	try {
+		const stored = sessionStorage.getItem(PENDING_INLINE_PROMPT_KEY);
+		if (!stored) {
+			return null;
+		}
+		const parsed = JSON.parse(stored);
+		if (!parsed || typeof parsed.prompt !== "string") {
+			clearPendingInlinePrompt();
+			return null;
+		}
+		return parsed;
+	} catch {
+		clearPendingInlinePrompt();
+		return null;
+	}
+};
+
+const findPromptSection = (targetPrompt: string) => {
+	const normalized = normalizePrompt(targetPrompt);
+	const normalizedWithoutDeterminer = normalized.replace(/^(an?|the)\s+/, "");
+	if (!normalized) {
+		return null;
+	}
+
+	const sections = Array.from(document.querySelectorAll<HTMLElement>('[id^="imagine-masonry-section-"]'));
+	for (const section of sections) {
+		const sticky = section.querySelector<HTMLElement>('div.sticky, div[class*="sticky"]');
+		const rawText = sticky?.textContent ?? "";
+		const text = normalizePrompt(rawText);
+		const textWithoutDeterminer = text.replace(/^(an?|the)\s+/, "");
+		if (
+			text === normalized ||
+			textWithoutDeterminer === normalizedWithoutDeterminer ||
+			text.includes(normalized) ||
+			normalized.includes(text) ||
+			textWithoutDeterminer.includes(normalizedWithoutDeterminer)
+		) {
+			console.log("[Grok Retry] Matched inline section by prompt", rawText);
+			return section;
+		}
+	}
+
+	const fallback = sections.length > 0 ? sections[sections.length - 1] : null;
+	if (!fallback) {
+		console.warn("[Grok Retry] No matching inline section found for prompt");
+	} else {
+		console.warn("[Grok Retry] Falling back to last inline section");
+	}
+	return fallback ?? null;
+};
+
+const ensureInlineEditor = async (targetPrompt: string): Promise<boolean> => {
+	const section = findPromptSection(targetPrompt);
+	if (!section) {
+		console.warn("[Grok Retry] Inline section unavailable for prompt, will retry");
+		return false;
+	}
+
+	const lookupEditor = () =>
+		section.querySelector<HTMLElement>(
+			'textarea[aria-label="Image prompt"], textarea, [role="textbox"][aria-label="Image prompt"], [role="textbox"], [contenteditable="true"]'
+		);
+
+	let editor = lookupEditor();
+	if (!editor) {
+		const trigger = section.querySelector<HTMLElement>('div.sticky, div[class*="sticky"]');
+		if (trigger) {
+			try {
+				trigger.click();
+			} catch {
+				trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			}
+			for (let attempt = 0; attempt < 20; attempt += 1) {
+				await delay(50);
+				editor = lookupEditor();
+				if (editor) {
+					console.log("[Grok Retry] Inline editor opened after click");
+					break;
+				}
+			}
+		}
+	}
+
+	if (!editor) {
+		console.warn("[Grok Retry] Inline editor not found after trigger");
+		return false;
+	}
+
+	const writeSucceeded = writePromptValue(editor, targetPrompt);
+	if (!writeSucceeded) {
+		console.warn("[Grok Retry] Failed to write prompt into inline editor");
+		return false;
+	}
+
+	const submitButton = section.querySelector<HTMLButtonElement>('button[type="submit"], button[aria-label="Submit"]');
+	if (!submitButton) {
+		console.warn("[Grok Retry] Inline submit button missing");
+		return false;
+	}
+
+	if (submitButton.disabled) {
+		submitButton.removeAttribute("disabled");
+	}
+	submitButton.focus();
+	submitButton.click();
+	console.log("[Grok Retry] Submitted prompt through inline editor");
+	return true;
+};
+
+const processPendingInlinePrompt = async (shouldCancel: () => boolean) => {
+	const parsed = getPendingInlinePrompt();
+	if (!parsed?.prompt) {
+		return;
+	}
+
+	if (parsed.createdAt && Date.now() - parsed.createdAt > MAX_PENDING_INLINE_AGE_MS) {
+		clearPendingInlinePrompt();
+		return;
+	}
+
+	for (let attempt = 0; attempt < 40 && !shouldCancel(); attempt += 1) {
+		if (await ensureInlineEditor(parsed.prompt)) {
+			clearPendingInlinePrompt();
+			return;
+		}
+		await delay(200);
+	}
+};
+
 const ImagineRootApp: React.FC = () => {
 	const { data: uiPrefs, save: saveUIPref } = useStorage();
 	const panelResize = usePanelResize();
@@ -591,26 +753,66 @@ const ImagineRootApp: React.FC = () => {
 		});
 	}, []);
 
+	const submitViaBottomPrompt = React.useCallback(
+		async (targetPrompt: string): Promise<boolean> => {
+			const copied = copyPromptToSite(targetPrompt);
+			if (!copied) {
+				console.warn("[Grok Retry] Failed to copy prompt into bottom textarea");
+				return false;
+			}
+
+			const submitButton = document.querySelector<HTMLButtonElement>('form button[type="submit"]');
+			if (!submitButton) {
+				console.warn("[Grok Retry] Bottom submit button missing");
+				return false;
+			}
+
+			if (submitButton.disabled) {
+				submitButton.removeAttribute("disabled");
+			}
+			submitButton.focus();
+			await delay(50); // allow composer state to register the copied text
+			const form = submitButton.form;
+			if (form && typeof form.requestSubmit === "function") {
+				form.requestSubmit(submitButton);
+			} else {
+				submitButton.click();
+			}
+			console.warn("[Grok Retry] Submitted prompt through bottom form fallback");
+			return true;
+		},
+		[copyPromptToSite]
+	);
+
 	const handleGenerateImages = React.useCallback(() => {
 		const trimmed = promptValue.trim();
 		if (!trimmed) {
 			return;
 		}
 
-		const copied = copyPromptToSite(trimmed);
-		if (!copied) {
-			return;
-		}
-
-		const submitButton = document.querySelector<HTMLButtonElement>('form button[type="submit"]');
-		if (submitButton) {
-			if (submitButton.disabled) {
-				submitButton.removeAttribute("disabled");
+		(async () => {
+			if (await ensureInlineEditor(trimmed)) {
+				clearPendingInlinePrompt();
+				return;
 			}
-			submitButton.focus();
-			submitButton.click();
-		}
-	}, [copyPromptToSite, promptValue]);
+
+			const submitted = await submitViaBottomPrompt(trimmed);
+			if (!submitted) {
+				return;
+			}
+
+			enqueuePendingInlinePrompt(trimmed);
+			for (let attempt = 0; attempt < 20; attempt += 1) {
+				await delay(200);
+				if (await ensureInlineEditor(trimmed)) {
+					clearPendingInlinePrompt();
+					return;
+				}
+			}
+		})().catch((error) => {
+			console.error("[Grok Retry] Failed to submit image prompt", error);
+		});
+	}, [promptValue, submitViaBottomPrompt]);
 
 	const toggleMinimized = React.useCallback(() => {
 		saveUIPref("isMinimized", !uiPrefs.isMinimized);

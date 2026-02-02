@@ -165,6 +165,7 @@ export const usePostId = (): PostRouteIdentity => {
                     delete w.__grok_pending_route_eval;
 
                     // Trigger migration from old post to new post
+                    // Preserve the original sessionMediaId to ensure all videos reference the same source image
                     if (w.__grok_migrate_state) {
                         w.__grok_migrate_state(sessionPostId, urlPostId, {
                             fromSessionKey: sessionMediaId ?? sessionPostId,
@@ -172,9 +173,12 @@ export const usePostId = (): PostRouteIdentity => {
                         });
                     }
 
-                    // Update session tracking to use new post ID
+                    // Update session tracking to use new post ID, but keep original media ID
                     w.__grok_session_post_id = urlPostId;
-                    w.__grok_session_media_id = nextMediaId ?? sessionMediaId ?? null;
+                    // Preserve sessionMediaId (original image ID) rather than replacing with nextMediaId
+                    if (!w.__grok_session_media_id && sessionMediaId) {
+                        w.__grok_session_media_id = sessionMediaId;
+                    }
 
                     // Clear route change flag
                     delete w.__grok_route_changed;

@@ -4,11 +4,13 @@ import { findPromptInput, writePromptValue } from '../lib/promptInput';
 import { usePostStorage } from './useSessionStorage';
 import type { SessionOutcome, SessionSummary } from './useSessionStorage';
 import type { PostRouteIdentity } from './usePostId';
+import { clearVideoAttemptsByImageReference } from '../lib/grokStream';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
 const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
 const PROGRESS_BUTTON_SELECTOR = 'button[aria-label="Video Options"]';
 const MAX_PROGRESS_RECORDS = 25;
+const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
 
 
 type ModerationLayer = {
@@ -101,6 +103,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
     const lastSessionOutcome = postData.lastSessionOutcome;
     const lastSessionSummary = postData.lastSessionSummary;
     const sessionKey = mediaId ?? postData.sessionMediaId ?? postId;
+    const originalMediaId = postData.originalMediaId ?? null;
 
     try {
         const w = window as any;
@@ -108,6 +111,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             isSessionActive: postData.isSessionActive,
             retryCount: postData.retryCount,
             canRetry: postData.canRetry,
+            originalMediaId,
         };
     } catch { }
 
@@ -201,11 +205,16 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             w.__grok_session_post_id = postId;
             console.log(`[Grok Retry] Session started with post ID: ${postId}`);
         }
+        // Store the original mediaId to ensure all video attempts reference the same source image
+        const originalMediaIdToStore = mediaId ?? postData.originalMediaId ?? null;
         if (mediaId) {
             w.__grok_session_media_id = mediaId;
             console.log(`[Grok Retry] Session keyed by media ID: ${mediaId}`);
         } else {
             delete w.__grok_session_media_id;
+        }
+        if (originalMediaIdToStore) {
+            console.log(`[Grok Retry] Original image ID for session: ${originalMediaIdToStore}`);
         }
         // Clear video history tracking - don't count pre-existing videos in the sidebar
         delete w.__grok_route_changed;
@@ -242,8 +251,170 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             lastPromptValue: promptToSave,
             videoGoal,
             videoGroup: updatedVideoGroup,
+            originalMediaId: originalMediaIdToStore,
         });
-    }, [resetProgressTracking, saveAll, postId, mediaId, maxRetries, autoRetryEnabled, lastPromptValue, videoGoal, videoGroup]);
+    }, [resetProgressTracking, saveAll, postId, mediaId, postData.originalMediaId, maxRetries, autoRetryEnabled, lastPromptValue, videoGoal, videoGroup]);
+
+    const clearVideoAttemptsByMediaId = useCallback((targetMediaId: string | null, outcome: SessionOutcome) => {
+        if (!targetMediaId) {
+            return;
+        }
+
+        console.log(`[Grok Retry] Clearing all video attempts for image ID: ${targetMediaId}`);
+
+        // Clear from grokStream state (window-level tracking)
+        try {
+            clearVideoAttemptsByImageReference(targetMediaId);
+        } catch (error) {
+            console.warn('[Grok Retry] Failed to clear video attempts from grokStream:', error);
+        }
+
+        // Clear from chrome.storage.local - find all posts with this originalMediaId
+        if (typeof chrome !== 'undefined' && chrome?.storage?.local) {
+            chrome.storage.local.get(null, (allData) => {
+                const updates: Record<string, unknown> = {};
+                let clearedCount = 0;
+
+                for (const [key, value] of Object.entries(allData)) {
+                    if (key.startsWith('grokRetryPost_') && typeof value === 'object' && value !== null) {
+                        const postData = value as any;
+                        if (postData.originalMediaId === targetMediaId && postData.isSessionActive) {
+                            updates[key] = {
+                                ...postData,
+                                isSessionActive: false,
+                                retryCount: 0,
+                                videosGenerated: 0,
+                                canRetry: false,
+                                lastSessionOutcome: outcome,
+                            };
+                            clearedCount++;
+                        }
+                    }
+                }
+
+                if (Object.keys(updates).length > 0) {
+                    chrome.storage.local.set(updates, () => {
+                        if (chrome.runtime.lastError) {
+                            console.warn('[Grok Retry] Failed to clear attempts in storage:', chrome.runtime.lastError);
+                        } else {
+                            console.log(`[Grok Retry] Cleared ${clearedCount} active sessions for image ${targetMediaId}`);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Clear from sessionStorage - find all sessions with this originalMediaId
+        if (typeof sessionStorage !== 'undefined') {
+            try {
+                const sessionKeys: string[] = [];
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const key = sessionStorage.key(i);
+                    if (key && key.startsWith(SESSION_STORAGE_PREFIX)) {
+                        sessionKeys.push(key);
+                    }
+                }
+
+                for (const key of sessionKeys) {
+                    try {
+                        const stored = sessionStorage.getItem(key);
+                        if (stored) {
+                            const parsed = JSON.parse(stored);
+                            // Check if this session data belongs to the same originalMediaId
+                            // Note: sessionStorage doesn't directly store originalMediaId, but we can infer
+                            // by checking if it's an active session for posts in our videoGroup
+                            if (parsed.isSessionActive) {
+                                const updated = {
+                                    ...parsed,
+                                    isSessionActive: false,
+                                    canRetry: false,
+                                    retryCount: 0,
+                                    videosGenerated: 0,
+                                    lastSessionOutcome: outcome,
+                                };
+                                sessionStorage.setItem(key, JSON.stringify(updated));
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('[Grok Retry] Failed to process session storage entry:', key, error);
+                    }
+                }
+            } catch (error) {
+                console.warn('[Grok Retry] Failed to clear sessionStorage:', error);
+            }
+        }
+    }, []);
+
+    const clearVideoGroupChain = useCallback((outcome: SessionOutcome) => {
+        const relatedPostIds = new Set<string>();
+        if (postId) {
+            relatedPostIds.add(postId);
+        }
+        if (Array.isArray(videoGroup)) {
+            for (const id of videoGroup) {
+                if (typeof id === 'string' && id.length > 0) {
+                    relatedPostIds.add(id);
+                }
+            }
+        }
+
+        if (relatedPostIds.size > 0 && typeof chrome !== 'undefined' && chrome?.storage?.local) {
+            const storageKeys = Array.from(relatedPostIds).map((id) => `grokRetryPost_${id}`);
+            chrome.storage.local.get(storageKeys, (result) => {
+                const updates: Record<string, unknown> = {};
+                for (const key of storageKeys) {
+                    const existing = result[key] || {};
+                    updates[key] = { ...existing, videoGroup: [] };
+                }
+                if (Object.keys(updates).length > 0) {
+                    chrome.storage.local.set(updates, () => {
+                        if (chrome.runtime.lastError) {
+                            console.warn('[Grok Retry] Failed to clear videoGroup chain:', chrome.runtime.lastError);
+                        } else {
+                            console.log('[Grok Retry] Cleared videoGroup chain for posts:', Array.from(relatedPostIds));
+                        }
+                    });
+                }
+            });
+        }
+
+        if (typeof sessionStorage !== 'undefined') {
+            const sessionKeys: string[] = [];
+            try {
+                for (let index = 0; index < sessionStorage.length; index += 1) {
+                    const key = sessionStorage.key(index);
+                    if (key && key.startsWith(SESSION_STORAGE_PREFIX)) {
+                        sessionKeys.push(key);
+                    }
+                }
+            } catch (error) {
+                console.warn('[Grok Retry] Unable to enumerate session storage keys:', error);
+            }
+
+            for (const fullKey of sessionKeys) {
+                try {
+                    const stored = sessionStorage.getItem(fullKey);
+                    if (!stored) {
+                        continue;
+                    }
+                    const parsed = JSON.parse(stored);
+                    const updated = {
+                        ...parsed,
+                        isSessionActive: false,
+                        canRetry: false,
+                        retryCount: 0,
+                        videosGenerated: 0,
+                        lastSessionOutcome: outcome,
+                    };
+                    sessionStorage.setItem(fullKey, JSON.stringify(updated));
+                } catch (error) {
+                    try {
+                        sessionStorage.removeItem(fullKey);
+                    } catch { }
+                }
+            }
+        }
+    }, [postId, videoGroup]);
 
     const endSession = useCallback((outcome: SessionOutcome = 'idle') => {
         resetProgressTracking();
@@ -255,6 +426,13 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         delete w.__grok_video_history_count;
         delete w.__grok_last_success_attempt;
         console.log(`[Grok Retry] Session ended with outcome: ${outcome}`);
+
+        // Clear all video attempts that share the same originalMediaId
+        if (originalMediaId) {
+            clearVideoAttemptsByMediaId(originalMediaId, outcome);
+        }
+
+        clearVideoGroupChain(outcome);
 
         const summary: SessionSummary = {
             outcome,
@@ -272,6 +450,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             isSessionActive: false,
             retryCount: 0,
             videosGenerated: 0,
+            canRetry: false,
             creditsUsed: 0,
             layer1Failures: 0,
             layer2Failures: 0,
@@ -279,8 +458,9 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             lastSessionOutcome: outcome,
             lastSessionSummary: summary,
             sessionMediaId: null,
+            videoGroup: [],
         });
-    }, [resetProgressTracking, saveAll, videosGenerated, videoGoal, retryCount, maxRetries, creditsUsed, layer1Failures, layer2Failures, layer3Failures]);
+    }, [resetProgressTracking, clearVideoGroupChain, clearVideoAttemptsByMediaId, saveAll, videosGenerated, videoGoal, retryCount, maxRetries, creditsUsed, layer1Failures, layer2Failures, layer3Failures, originalMediaId]);
 
     const markFailureDetected = useCallback((): 1 | 2 | 3 | null => {
         const now = Date.now();
@@ -586,6 +766,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         lastSessionOutcome,
         lastSessionSummary,
         isLoading,
+        originalMediaId: postData.originalMediaId,
 
         // Actions
         setMaxRetries,

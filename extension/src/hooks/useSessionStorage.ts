@@ -9,6 +9,7 @@ interface PersistentData {
     lastPromptValue: string;
     videoGoal: number;
     videoGroup: string[]; // Array of related post IDs in this video generation session
+    originalMediaId: string | null; // Original image ID that started the video generation session
 }
 
 export type SessionOutcome = 'idle' | 'pending' | 'success' | 'failure' | 'cancelled';
@@ -68,6 +69,7 @@ const createDefaultPostData = (): PostData => ({
     lastPromptValue: '',
     videoGoal: 1,
     videoGroup: [],
+    originalMediaId: null,
     retryCount: 0,
     isSessionActive: false,
     videosGenerated: 0,
@@ -133,6 +135,7 @@ export const usePostStorage = (postId: string | null, mediaId: string | null) =>
                 lastPromptValue: '',
                 videoGoal: globalSettings.defaultVideoGoal ?? 1,
                 videoGroup: [],
+                originalMediaId: null,
             };
 
             const DEFAULT_SESSION_DATA: SessionData = {
