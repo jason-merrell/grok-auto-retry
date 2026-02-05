@@ -33,7 +33,6 @@ export interface GlobalSettings {
     showRapidFailureWarning: boolean;
     autoSwitchToDebug: boolean; // Auto-switch to debug panel on session start
     autoSwitchToResultsOnComplete: boolean; // Auto-open results after a session finishes
-    useStreamBasedDetection: boolean; // Use network stream for moderation/success detection (more reliable)
 
     // Selector overrides (for language differences or when selectors change)
     customSelectors?: {
@@ -42,7 +41,6 @@ export interface GlobalSettings {
         videoElement?: string;
         promptTextarea?: string;
     };
-
     keyboardShortcuts: KeyboardShortcutSettings;
 
     // Import/Export
@@ -109,7 +107,6 @@ const DEFAULT_SETTINGS: GlobalSettings = {
     showRapidFailureWarning: true,
     autoSwitchToDebug: false,
     autoSwitchToResultsOnComplete: false,
-    useStreamBasedDetection: true, // Default to true for better reliability
     customSelectors: undefined,
     keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
 };

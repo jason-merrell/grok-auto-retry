@@ -2,7 +2,6 @@ import React, { useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useGrokRetry } from "@/hooks/useGrokRetry";
 import { useStorage } from "@/hooks/useStorage";
-import { useModerationDetector } from "@/hooks/useModerationDetector";
 import { useStreamModerationDetector } from "@/hooks/useStreamModerationDetector";
 import { useSuccessDetector } from "@/hooks/useSuccessDetector";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -181,33 +180,12 @@ const ImaginePostApp: React.FC = () => {
 		recordPromptOutcome,
 	]);
 
-	const handleRateLimitDetected = React.useCallback(() => {
-		if (nextVideoTimeoutRef.current) {
-			clearTimeout(nextVideoTimeoutRef.current);
-			nextVideoTimeoutRef.current = null;
-		}
-
-		if (!isSessionActive) {
-			return;
-		}
-
-		console.warn("[Grok Retry] Cancelling session due to rate limit");
-		endSession("cancelled");
-		sessionPromptRef.current = null;
-	}, [isSessionActive, endSession]);
-
-	const { rateLimitDetected } = useModerationDetector({
-		onModerationDetected: handleModerationDetected,
-		onRateLimitDetected: handleRateLimitDetected,
-		enabled: autoRetryEnabled && !globalSettings.useStreamBasedDetection, // Disable UI-based detection when stream is enabled
-	});
-
-	// Stream-based moderation detection (more reliable, no UI dependency)
+	// Stream-based moderation detection (replaces UI-based detection)
 	const streamParentPostId = mediaId ?? postId;
 	useStreamModerationDetector({
 		parentPostId: streamParentPostId,
 		onModerationDetected: handleModerationDetected,
-		enabled: autoRetryEnabled && globalSettings.useStreamBasedDetection,
+		enabled: autoRetryEnabled,
 	});
 
 	// Handle successful video generation
@@ -332,7 +310,7 @@ const ImaginePostApp: React.FC = () => {
 		retryCount,
 		maxRetries,
 		autoRetryEnabled,
-		rateLimitDetected,
+		false, // isRateLimited - no longer using UI-based rate limit detection
 		videoGoal,
 		videosGenerated,
 		isSessionActive,

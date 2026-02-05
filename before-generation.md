@@ -1,0 +1,174 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - link "Home page" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - img [ref=e8]
+      - generic [ref=e11]:
+        - button "Search" [ref=e14] [cursor=pointer]:
+          - img [ref=e18]
+        - list [ref=e24]:
+          - listitem [ref=e25]:
+            - link [ref=e26] [cursor=pointer]:
+              - /url: /
+              - img [ref=e30]
+        - list [ref=e39]:
+          - listitem [ref=e40]:
+            - link [ref=e41] [cursor=pointer]:
+              - /url: /?voice=true
+              - img [ref=e45]
+        - list [ref=e51]:
+          - listitem [ref=e52]:
+            - link [ref=e53] [cursor=pointer]:
+              - /url: /imagine
+              - img [ref=e57]
+        - list [ref=e72]:
+          - listitem [ref=e73]:
+            - link [ref=e74] [cursor=pointer]:
+              - /url: /project
+              - img [ref=e78]
+        - list [ref=e87]:
+          - listitem [ref=e88]:
+            - button "History" [ref=e89] [cursor=pointer]:
+              - img [ref=e93]
+      - generic [ref=e105]:
+        - button "pfp" [ref=e108] [cursor=pointer]:
+          - img "pfp" [ref=e110]
+        - button "Toggle Sidebar" [ref=e112] [cursor=pointer]:
+          - img [ref=e113]
+          - generic [ref=e116]: Toggle Sidebar
+    - generic [ref=e122]:
+      - button "Back" [ref=e123] [cursor=pointer]:
+        - img [ref=e124]
+      - main [ref=e126]:
+        - article [ref=e127]:
+          - generic [ref=e130]:
+            - generic [ref=e344]:
+              - img "Moderated" [ref=e345]
+              - img "Moderated" [ref=e346]
+              - img [ref=e348]
+            - generic [ref=e133]:
+              - generic "Text alignment" [ref=e276]:
+                - button "Video" [ref=e277] [cursor=pointer]:
+                  - img [ref=e278]
+                  - generic [ref=e280]: Video
+                - button "Image" [ref=e281] [cursor=pointer]:
+                  - img [ref=e282]
+                  - generic [ref=e286]: Image
+              - generic:
+                - button "More options":
+                  - img
+      - generic [ref=e152]:
+        - button "Favorites" [ref=e155] [cursor=pointer]:
+          - generic [ref=e156]:
+            - img "7fb8b0e6-bd1c-4f96-8f9a-66aa273a4403" [ref=e158]
+            - img "0e9b213c-cfcd-4376-9204-e87b1471e59d" [ref=e160]
+            - img "d333f276-0213-42a9-adb0-3d83e350d890" [ref=e162]
+        - generic [ref=e164]:
+          - generic [ref=e168]:
+            - textbox "Make a video" [ref=e342]:
+              - /placeholder: Type to customize video...
+              - text: She lap dances
+            - generic [ref=e170]:
+              - button "Video Options" [ref=e171] [cursor=pointer]:
+                - img [ref=e353]
+                - img [ref=e174]
+              - button "Make video" [ref=e176] [cursor=pointer]:
+                - generic [ref=e177]: Redo
+                - img [ref=e179]
+          - generic [ref=e181]:
+            - generic:
+              - button "Download":
+                - img
+                - generic: Download image
+              - button "Create share link":
+                - img
+              - button "Compose Post":
+                - img
+    - heading "Upgrade to SuperGrok" [level=2] [ref=e196]
+  - region "Notifications alt+T"
+  - generic:
+    - region "Notifications (F8)":
+      - list
+    - generic [ref=e197]:
+      - generic "Drag to resize" [ref=e198]
+      - generic [ref=e203]:
+        - heading "Grok Auto Retry" [level=2] [ref=e205]
+        - generic [ref=e206]:
+          - button "Show Results" [ref=e355] [cursor=pointer]:
+            - img
+          - button [ref=e207] [cursor=pointer]:
+            - img
+          - button [ref=e208] [cursor=pointer]:
+            - img
+          - button [ref=e209] [cursor=pointer]:
+            - img
+          - button [ref=e210] [cursor=pointer]:
+            - img
+      - generic [ref=e212]:
+        - generic [ref=e213]:
+          - generic [ref=e214]: Auto-Retry ON
+          - switch "Auto-Retry ON" [checked] [ref=e215] [cursor=pointer]
+        - generic [ref=e216]:
+          - generic [ref=e217]:
+            - generic [ref=e219]: Retries Used
+            - generic [ref=e220]: 0 / 3
+          - generic [ref=e221]:
+            - generic [ref=e222]: Videos Generated
+            - generic [ref=e223]: 0 / 1
+        - generic [ref=e224]:
+          - generic [ref=e225]:
+            - generic [ref=e226]: Max Retries
+            - button "Set Max" [ref=e228] [cursor=pointer]
+          - generic [ref=e229]:
+            - button [ref=e230] [cursor=pointer]:
+              - img
+            - spinbutton [ref=e231]: "3"
+            - button [ref=e232] [cursor=pointer]:
+              - img
+        - generic [ref=e233]:
+          - generic [ref=e235]: Video Goal
+          - generic [ref=e236]:
+            - button [disabled]:
+              - img
+            - spinbutton [ref=e237]: "1"
+            - button [ref=e238] [cursor=pointer]:
+              - img
+        - generic [ref=e239]:
+          - generic [ref=e240]:
+            - generic [ref=e241]: Prompt
+            - generic [ref=e242]:
+              - button "Import" [ref=e243] [cursor=pointer]:
+                - img
+                - generic [ref=e244]: Import
+              - generic [ref=e245]: "|"
+              - button "Export" [ref=e246] [cursor=pointer]:
+                - img
+                - generic [ref=e247]: Export
+              - generic [ref=e248]: "|"
+              - button "Save" [ref=e249] [cursor=pointer]:
+                - img
+                - generic [ref=e250]: Save
+              - generic [ref=e251]: "|"
+              - button "Load" [ref=e252] [cursor=pointer]:
+                - img
+                - generic [ref=e253]: Load
+              - generic [ref=e254]: "|"
+              - button "History" [ref=e255] [cursor=pointer]:
+                - img
+                - generic [ref=e256]: History
+          - textbox "Your prompt will appear here..." [ref=e257]: She lap dances
+        - generic [ref=e258]:
+          - combobox [ref=e259] [cursor=pointer]:
+            - img
+            - text: Add Prompt Partial
+          - button [ref=e260] [cursor=pointer]:
+            - img
+      - generic [ref=e262]:
+        - button "Start Session" [active] [ref=e357] [cursor=pointer]:
+          - img
+          - text: Start Session
+        - button "Unmute video" [ref=e265] [cursor=pointer]:
+          - img
+          - generic [ref=e266]: Unmute
+  - alert [ref=e267]: Imagine - Grok

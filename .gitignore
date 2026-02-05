@@ -12,3 +12,4 @@ docs/eval**
 *.crx
 *.pem
 **.pw**
+**.playwright-mcp**
