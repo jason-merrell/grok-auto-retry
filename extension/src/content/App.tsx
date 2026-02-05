@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useGrokRetry } from "@/hooks/useGrokRetry";
 import { useStorage } from "@/hooks/useStorage";
 import { useModerationDetector } from "@/hooks/useModerationDetector";
+import { useStreamModerationDetector } from "@/hooks/useStreamModerationDetector";
 import { useSuccessDetector } from "@/hooks/useSuccessDetector";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { usePromptCapture } from "@/hooks/usePromptCapture";
@@ -198,7 +199,15 @@ const ImaginePostApp: React.FC = () => {
 	const { rateLimitDetected } = useModerationDetector({
 		onModerationDetected: handleModerationDetected,
 		onRateLimitDetected: handleRateLimitDetected,
-		enabled: autoRetryEnabled,
+		enabled: autoRetryEnabled && !globalSettings.useStreamBasedDetection, // Disable UI-based detection when stream is enabled
+	});
+
+	// Stream-based moderation detection (more reliable, no UI dependency)
+	const streamParentPostId = mediaId ?? postId;
+	useStreamModerationDetector({
+		parentPostId: streamParentPostId,
+		onModerationDetected: handleModerationDetected,
+		enabled: autoRetryEnabled && globalSettings.useStreamBasedDetection,
 	});
 
 	// Handle successful video generation

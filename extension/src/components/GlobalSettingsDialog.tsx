@@ -423,6 +423,29 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 								/>
 							</div>
 
+							<div className="flex items-center justify-between">
+								<div className="space-y-1">
+									<Label htmlFor="useStreamBasedDetection" className="text-sm">
+										Use Stream-Based Detection{" "}
+										<Badge variant="outline" className="ml-2">
+											Recommended
+										</Badge>
+									</Label>
+									<p className="text-xs text-muted-foreground">
+										Monitor network stream for more reliable moderation/success detection (faster & more
+										accurate than UI-based)
+									</p>
+								</div>
+								<Switch
+									id="useStreamBasedDetection"
+									checked={settings.useStreamBasedDetection}
+									onCheckedChange={(checked) => {
+										saveSetting("useStreamBasedDetection", checked);
+										showSaveStatus("Saved");
+									}}
+								/>
+							</div>
+
 							<div className="border-t pt-4 space-y-4">
 								<div>
 									<h4 className="text-sm font-medium mb-1">Custom CSS Selectors</h4>
@@ -438,8 +461,8 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 											</div>
 											<p className="text-muted-foreground leading-relaxed">
 												To find selectors: Right-click an element → Inspect → Copy selector from
-												DevTools. Test in Console with{" "}
-												<code className="bg-background px-1 rounded">
+												DevTools. Example:{" "}
+												<code className="text-[10px] bg-background px-1 py-0.5 rounded">
 													document.querySelector("your-selector")
 												</code>
 											</p>
