@@ -12,7 +12,7 @@ import {
 	isModerationLayerKey,
 	type ModerationLayerKey,
 } from "@/lib/moderationLayers";
-import type { SessionSummary } from "@/hooks/useSessionStorage";
+import type { SessionSummary } from "@/hooks/useGrokRetryVideoSessions";
 import { ResizeHandle } from "./ResizeHandle";
 import { PanelHeader } from "./PanelHeader";
 import { RetryControls } from "./RetryControls";
@@ -23,7 +23,7 @@ import { PromptTextarea } from "./PromptTextarea";
 import { PromptPartials } from "./PromptPartials";
 import { ActionButton } from "./ActionButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { PromptHistoryRecord } from "@/hooks/usePromptHistory";
+import type { PromptHistoryRecord } from "@/hooks/useGrokRetryPromptHistory";
 
 const ATTEMPT_CHART_CONFIG: ChartConfig = {
 	success: { label: "Successes", color: "hsl(142 70% 45%)" },
@@ -493,10 +493,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 								const cls = isError
 									? "text-red-500"
 									: isWarn
-									? "text-yellow-500"
-									: isSuccess
-									? "text-green-500"
-									: "text-muted-foreground";
+										? "text-yellow-500"
+										: isSuccess
+											? "text-green-500"
+											: "text-muted-foreground";
 
 								const rawLayerMatch =
 									line.match(/—\s*(Security Layer [^—]+)$/i) ?? line.match(/—\s*(Layer [^—]+)$/i);
@@ -507,7 +507,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 												? normalized
 												: `SECURITY ${normalized}`;
 											return isModerationLayerKey(candidate) ? candidate : null;
-									  })()
+										})()
 									: null;
 								const layerDetails = layerKey ? MODERATION_LAYER_DETAILS[layerKey] : undefined;
 
@@ -590,13 +590,13 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 								width: "100vw",
 								height: "100vh",
 								borderRadius: 0,
-						  }
+							}
 						: {
 								bottom: "16px",
 								right: "16px",
 								width: `${width}px`,
 								height: `${height}px`,
-						  }),
+							}),
 					fontSize: `${isMaximized ? Math.max(fontSize * 1.2, 14) : fontSize}px`,
 				}}
 			>

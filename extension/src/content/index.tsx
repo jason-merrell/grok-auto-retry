@@ -1,8 +1,6 @@
-import { installGrokStreamInterceptor } from "../lib/grokStream";
 import { setupDebug } from "../lib/debug";
 
 setupDebug();
-installGrokStreamInterceptor();
 // Mark when content script entry runs for tests
 (window as any).__grok_content_loaded = true;
 import ReactDOM from "react-dom/client";

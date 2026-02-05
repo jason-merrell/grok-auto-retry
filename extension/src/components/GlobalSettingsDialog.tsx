@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useGlobalSettings } from "@/hooks/useGlobalSettings";
+import { useGrokRetrySettings } from "@/hooks/useGrokRetrySettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,7 @@ interface GlobalSettingsDialogProps {
 }
 
 export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open, onOpenChange }) => {
-	const { settings, isLoading, saveSetting, resetToDefaults, exportSettings, importSettings } = useGlobalSettings();
+	const { settings, isLoading, saveSetting, resetToDefaults, exportSettings, importSettings } = useGrokRetrySettings();
 	const { toast } = useToast();
 	const [activeTab, setActiveTab] = useState<"defaults" | "timing" | "ui" | "advanced">("defaults");
 
@@ -422,7 +422,6 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 									}}
 								/>
 							</div>
-
 
 							<div className="border-t pt-4 space-y-4">
 								<div>

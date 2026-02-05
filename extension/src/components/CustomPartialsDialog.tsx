@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PromptPartial } from "@/config/promptPartials";
 import { Trash2, Plus, Edit2, X, BookmarkIcon } from "lucide-react";
-import { useSavedPrompts } from "@/hooks/useSavedPrompts";
+import { useGrokRetrySavedPrompts } from "@/hooks/useGrokRetrySavedPrompts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -121,7 +121,7 @@ export const CustomPartialsDialog: React.FC<CustomPartialsDialogProps> = ({
 
 	const canSave = formData.label.trim() && formData.content.trim();
 	const canSavePrompt = promptFormData.name.trim() && promptFormData.text.trim();
-	const { listPrompts, deletePrompt, renamePrompt, savePrompt } = useSavedPrompts();
+	const { listPrompts, deletePrompt, renamePrompt, savePrompt } = useGrokRetrySavedPrompts();
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>

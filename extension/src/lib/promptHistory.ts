@@ -27,10 +27,10 @@ export interface PromptHistoryUpdate {
 
 export type PromptHistoryTable = Record<string, PromptHistoryRecord>;
 
-export const PROMPT_HISTORY_STORAGE_KEY = "grokRetry_promptHistory";
+export const PROMPT_HISTORY_STORAGE_KEY = "useGrokRetryPromptHistory";
 export const PROMPT_HISTORY_UPDATED_EVENT = "grok:promptHistoryUpdated";
 
-const GLOBAL_SETTINGS_STORAGE_KEY = "grokRetry_globalSettings";
+const GLOBAL_SETTINGS_STORAGE_KEY = "useGrokRetrySettings_store";
 const PROMPT_HISTORY_LIMIT_DEFAULT = 30;
 const PROMPT_HISTORY_LIMIT_MIN = 1;
 const PROMPT_HISTORY_LIMIT_MAX = 200;

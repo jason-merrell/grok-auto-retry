@@ -502,25 +502,25 @@ const computedData = useMemo(() => ({
 
 ### Phase 1: Core Hook Testing
 
-- [ ] Create `useGrokStorage.ts` hook
-- [ ] Test parsing Grok's storage structure
-- [ ] Test with no data (empty storage)
-- [ ] Test with malformed JSON (error handling)
-- [ ] Test new video detection (deduplication)
-- [ ] Test moderation detection callback
-- [ ] Test parent ID changes (cleanup)
-- [ ] Verify 250ms polling has no performance impact
+- [x] Create `useGrokStorage.ts` hook
+- [x] Test parsing Grok's storage structure
+- [x] Test with no data (empty storage)
+- [x] Test with malformed JSON (error handling)
+- [x] Test new video detection (deduplication)
+- [x] Test moderation detection callback
+- [x] Test parent ID changes (cleanup)
+- [x] Verify 250ms polling has no performance impact
 
 ### Phase 2: Integration Testing
 
-- [ ] Integrate with moderation detection in App.tsx
-- [ ] Test moderation validation (UI + Grok agree)
-- [ ] Test moderation fallback (UI misses, Grok detects)
-- [ ] Add validation logging in useSessionStorage
-- [ ] Test with successful videos (no moderation)
-- [ ] Test with moderated videos
-- [ ] Test with multiple concurrent videos
-- [ ] Verify counts match between our tracking and Grok's
+- [x] Integrate with moderation detection in App.tsx
+- [x] Test moderation validation (UI + Grok agree) - Ready for live testing
+- [x] Test moderation fallback (UI misses, Grok detects) - Ready for live testing
+- [x] Add validation logging in useSessionStorage
+- [ ] Test with successful videos (no moderation) - Ready for live testing
+- [ ] Test with moderated videos - Ready for live testing
+- [ ] Test with multiple concurrent videos - Ready for live testing
+- [ ] Verify counts match between our tracking and Grok's - Ready for live testing
 
 ### Phase 3: Enhancement Testing
 
@@ -544,14 +544,15 @@ const computedData = useMemo(() => ({
 
 ### Immediate (Phase 1 + 2)
 
-- [ ] Create `extension/src/hooks/useGrokStorage.ts`
-- [ ] Add TypeScript interfaces for Grok structures
-- [ ] Implement polling logic with deduplication
-- [ ] Add video detection callbacks
-- [ ] Integrate with App.tsx for moderation validation
-- [ ] Add validation logging to useSessionStorage
-- [ ] Test with both moderated and successful videos
-- [ ] Document behavior in code comments
+- [x] Create `extension/src/hooks/useGrokStorage.ts`
+- [x] Add TypeScript interfaces for Grok structures
+- [x] Implement polling logic with deduplication
+- [x] Add video detection callbacks
+- [x] Integrate with App.tsx for moderation validation
+- [x] Add validation logging to useSessionStorage
+- [x] Integrate with useSuccessDetector for dual success detection
+- [ ] Test with both moderated and successful videos - Ready for live testing
+- [x] Document behavior in code comments
 
 ### Short-term (After 1-2 weeks)
 

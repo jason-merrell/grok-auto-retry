@@ -1,18 +1,18 @@
 import React, { useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useGrokRetry } from "@/hooks/useGrokRetry";
-import { useStorage } from "@/hooks/useStorage";
-import { useStreamModerationDetector } from "@/hooks/useStreamModerationDetector";
-import { useSuccessDetector } from "@/hooks/useSuccessDetector";
-import { usePageTitle } from "@/hooks/usePageTitle";
-import { usePromptCapture } from "@/hooks/usePromptCapture";
-import { usePanelResize } from "@/hooks/usePanelResize";
-import { useMiniToggleDrag } from "@/hooks/useMiniToggleDrag";
-import { useRouteMatch } from "@/hooks/useRouteMatch";
-import { usePostId } from "@/hooks/usePostId";
-import { useGlobalSettings } from "@/hooks/useGlobalSettings";
-import usePromptHistory from "@/hooks/usePromptHistory";
-import { useMuteController } from "@/hooks/useMuteController";
+import { useGrokRetryUI } from "@/hooks/useGrokRetryUI";
+import { useGrokRetryGrokStorage } from "@/hooks/useGrokRetryGrokStorage";
+import { useGrokRetrySuccessDetector } from "@/hooks/useGrokRetrySuccessDetector";
+import { useGrokRetryPageTitle } from "@/hooks/useGrokRetryPageTitle";
+import { useGrokRetryPromptCapture } from "@/hooks/useGrokRetryPromptCapture";
+import { useGrokRetryPanelResize } from "@/hooks/useGrokRetryPanelResize";
+import { useGrokRetryMiniToggleDrag } from "@/hooks/useGrokRetryMiniToggleDrag";
+import { useGrokRetryRouteMatch } from "@/hooks/useGrokRetryRouteMatch";
+import { useGrokRetryPostId } from "@/hooks/useGrokRetryPostId";
+import { useGrokRetrySettings } from "@/hooks/useGrokRetrySettings";
+import useGrokRetryPromptHistory from "@/hooks/useGrokRetryPromptHistory";
+import { useGrokRetryMuteController } from "@/hooks/useGrokRetryMuteController";
 import type { PromptHistoryLayer } from "@/lib/promptHistory";
 import { writePromptValue } from "@/lib/promptInput";
 import { ControlPanel } from "@/components/ControlPanel";
@@ -23,35 +23,10 @@ import { Toaster } from "@/components/ui/toaster";
 
 const ImaginePostApp: React.FC = () => {
 	// Only show on /imagine/post/* routes
-	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
-	const { postId, mediaId } = usePostId();
-	const { settings: globalSettings, isLoading: globalSettingsLoading } = useGlobalSettings();
-	const muteControl = useMuteController(isImaginePostRoute);
-	// Provide a global append log helper used by detectors
-	useEffect(() => {
-		const sessionKey = mediaId ?? postId;
-		(window as any).__grok_append_log = (line: string, level: "info" | "warn" | "error" | "success" = "info") => {
-			if (!sessionKey) {
-				return;
-			}
-			const key = `grokRetrySession_${sessionKey}`;
-			try {
-				const stored = sessionStorage.getItem(key);
-				const existing = stored ? JSON.parse(stored) : {};
-				const logs = Array.isArray(existing.logs) ? existing.logs : [];
-				const next = [...logs, `${new Date().toLocaleTimeString()} — ${level.toUpperCase()} — ${line}`].slice(-200);
-				sessionStorage.setItem(key, JSON.stringify({ ...existing, logs: next }));
-				// Notify listeners for live updates with level
-				window.dispatchEvent(new CustomEvent("grok:log", { detail: { key: sessionKey, postId, line, level } }));
-			} catch {}
-		};
-		return () => {
-			try {
-				delete (window as any).__grok_append_log;
-			} catch {}
-		};
-	}, [postId, mediaId]);
-
+	const isImaginePostRoute = useGrokRetryRouteMatch("^/imagine/post/");
+	const { postId, mediaId } = useGrokRetryPostId();
+	const { settings: globalSettings, isLoading: globalSettingsLoading } = useGrokRetrySettings();
+	const muteControl = useGrokRetryMuteController(isImaginePostRoute);
 	const retry = useGrokRetry({ postId, mediaId });
 	const {
 		autoRetryEnabled,
@@ -78,12 +53,24 @@ const ImaginePostApp: React.FC = () => {
 		clearLogs,
 		lastSessionOutcome,
 		lastSessionSummary,
+		appendLog, // Now comes from useGrokRetry
 	} = retry;
-	const { data: uiPrefs, save: saveUIPref } = useStorage();
-	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
-	const { records: promptHistoryRecords, recordOutcome: recordPromptHistoryOutcome } = usePromptHistory();
-	const panelResize = usePanelResize();
-	const miniDrag = useMiniToggleDrag();
+
+	// Provide global append log helper for detectors (now uses centralized store)
+	useEffect(() => {
+		(window as any).__grok_append_log = appendLog;
+		return () => {
+			try {
+				delete (window as any).__grok_append_log;
+			} catch {}
+		};
+	}, [appendLog]);
+
+	const { data: uiPrefs, save: saveUIPref } = useGrokRetryUI();
+	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = useGrokRetryPromptCapture();
+	const { records: promptHistoryRecords, recordOutcome: recordPromptHistoryOutcome } = useGrokRetryPromptHistory();
+	const panelResize = useGrokRetryPanelResize();
+	const miniDrag = useGrokRetryMiniToggleDrag();
 	const [showDebug, setShowDebug] = React.useState(false);
 	const [settingsOpen, setSettingsOpen] = React.useState(false);
 	const nextVideoTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -180,12 +167,31 @@ const ImaginePostApp: React.FC = () => {
 		recordPromptOutcome,
 	]);
 
-	// Stream-based moderation detection (replaces UI-based detection)
-	const streamParentPostId = mediaId ?? postId;
-	useStreamModerationDetector({
-		parentPostId: streamParentPostId,
-		onModerationDetected: handleModerationDetected,
-		enabled: autoRetryEnabled,
+	// Grok storage monitoring for moderation detection and validation
+	// This monitors Grok's sessionStorage for authoritative video data
+	// Pass postId (video post ID) - the hook will auto-resolve to parent image ID
+	useGrokRetryGrokStorage(postId, {
+		onModerationDetected: (video) => {
+			console.log("[Grok Storage] Moderation detected/validated:", {
+				videoId: video.videoId,
+				createTime: video.createTime,
+				prompt: video.videoPrompt || "(empty)",
+				thumbnailUrl: video.thumbnailImageUrl,
+			});
+
+			// Trigger moderation handling as validation/fallback
+			// This confirms UI detection or catches it if UI structure changes
+			handleModerationDetected();
+		},
+		onVideoDetected: (video) => {
+			console.log("[Grok Storage] Video detected:", {
+				videoId: video.videoId,
+				moderated: video.moderated,
+				mode: video.mode,
+				createTime: video.createTime,
+			});
+		},
+		debug: false, // Disable debug logging in production
 	});
 
 	// Handle successful video generation
@@ -193,25 +199,6 @@ const ImaginePostApp: React.FC = () => {
 		// Only handle success if a session is active
 		if (!isSessionActive) {
 			console.log("[Grok Retry] Success detected but no active session - ignoring");
-			return;
-		}
-
-		console.log("[Grok Retry] Video generated successfully!");
-		incrementVideosGenerated();
-		recordPromptOutcome("success");
-
-		const newCount = videosGenerated + 1;
-
-		// Check if we've reached the video goal
-		if (newCount >= videoGoal) {
-			console.log(`[Grok Retry] Video goal reached! Generated ${newCount}/${videoGoal} videos`);
-			endSession("success");
-			sessionPromptRef.current = null;
-		} else {
-			// Continue generating - restart the cycle
-			console.log(`[Grok Retry] Progress: ${newCount}/${videoGoal} videos generated, continuing...`);
-
-			// Clear any existing timeout
 			if (nextVideoTimeoutRef.current) {
 				clearTimeout(nextVideoTimeoutRef.current);
 			}
@@ -242,7 +229,7 @@ const ImaginePostApp: React.FC = () => {
 
 	// Keep success detector running while on imagine post page, not just when session is active
 	// This ensures we detect success even if session timeout occurs during video generation
-	useSuccessDetector(handleSuccess, !!postId);
+	useGrokRetrySuccessDetector(handleSuccess, !!postId);
 
 	// Auto-cancel interrupted sessions on mount (after refresh/navigation) - only once
 	useEffect(() => {
@@ -305,7 +292,7 @@ const ImaginePostApp: React.FC = () => {
 	}, []);
 
 	// Set up page title updates
-	usePageTitle(
+	useGrokRetryPageTitle(
 		originalPageTitle,
 		retryCount,
 		maxRetries,
@@ -682,10 +669,10 @@ const processPendingInlinePrompt = async (shouldCancel: () => boolean) => {
 };
 
 const ImagineRootApp: React.FC = () => {
-	const { data: uiPrefs, save: saveUIPref } = useStorage();
-	const panelResize = usePanelResize();
-	const miniDrag = useMiniToggleDrag();
-	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = usePromptCapture();
+	const { data: uiPrefs, save: saveUIPref } = useGrokRetryUI();
+	const panelResize = useGrokRetryPanelResize();
+	const miniDrag = useGrokRetryMiniToggleDrag();
+	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = useGrokRetryPromptCapture();
 	const initialStoredPrompt = uiPrefs.imaginePromptValue ?? "";
 	const [promptValue, setPromptValue] = React.useState(initialStoredPrompt);
 	const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -857,8 +844,8 @@ const ImagineRootApp: React.FC = () => {
 };
 
 const App: React.FC = () => {
-	const isImaginePostRoute = useRouteMatch("^/imagine/post/");
-	const isImagineRootRoute = useRouteMatch("^/imagine/?$");
+	const isImaginePostRoute = useGrokRetryRouteMatch("^/imagine/post/");
+	const isImagineRootRoute = useGrokRetryRouteMatch("^/imagine/?$");
 
 	let content: React.ReactNode = null;
 

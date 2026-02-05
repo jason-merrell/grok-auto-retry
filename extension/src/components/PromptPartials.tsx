@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { promptPartials } from "@/config/promptPartials";
-import { useCustomPartials } from "@/hooks/useCustomPartials";
+import { useGrokRetryCustomPartials } from "@/hooks/useGrokRetryCustomPartials";
 import { CustomPartialsDialog } from "@/components/CustomPartialsDialog";
 import { Plus, SettingsIcon } from "lucide-react";
 
@@ -16,7 +16,7 @@ export const PromptPartials: React.FC<PromptPartialsProps> = ({ onAppendPartial,
 	const [open, setOpen] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState<string>("all");
 	const [dialogOpen, setDialogOpen] = useState(false);
-	const { customPartials, addPartial, updatePartial, deletePartial } = useCustomPartials();
+	const { customPartials, addPartial, updatePartial, deletePartial } = useGrokRetryCustomPartials();
 
 	// Combine built-in and custom partials
 	const allPartials = [...promptPartials, ...customPartials];

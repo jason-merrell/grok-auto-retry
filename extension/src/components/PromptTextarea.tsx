@@ -10,8 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useSavedPrompts } from "@/hooks/useSavedPrompts";
-import type { PromptHistoryRecord } from "@/hooks/usePromptHistory";
+import { useGrokRetrySavedPrompts } from "@/hooks/useGrokRetrySavedPrompts";
+import type { PromptHistoryRecord } from "@/hooks/useGrokRetryPromptHistory";
 import { SelectPortal } from "@radix-ui/react-select";
 
 type HistorySortOption = "lastUsed" | "mostUsed" | "mostSuccessful";
@@ -41,7 +41,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
 	isMaximized = false,
 	promptHistoryRecords = [],
 }) => {
-	const { listPrompts, savePrompt } = useSavedPrompts();
+	const { listPrompts, savePrompt } = useGrokRetrySavedPrompts();
 	const [loadOpen, setLoadOpen] = React.useState(false);
 	const [historyOpen, setHistoryOpen] = React.useState(false);
 	const [historySearch, setHistorySearch] = React.useState("");
@@ -281,7 +281,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
 																? Math.round(
 																		(record.successAmount / record.executionsAmount) *
 																			100
-																  )
+																	)
 																: 0;
 														const failureCount = Math.max(
 															record.executionsAmount - record.successAmount,
@@ -301,8 +301,8 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
 															record.lastOutcome === "success"
 																? "text-green-500 dark:text-green-400"
 																: record.lastOutcome === "failure"
-																? "text-amber-500 dark:text-amber-300"
-																: "text-card-foreground/70";
+																	? "text-amber-500 dark:text-amber-300"
+																	: "text-card-foreground/70";
 														const lastExecutedLabel = record.lastExecuted
 															? new Date(record.lastExecuted).toLocaleString()
 															: "Never";
