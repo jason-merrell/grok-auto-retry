@@ -5,7 +5,7 @@ import { useGrokRetryVideoSessions } from './useGrokRetryVideoSessions';
 import type { SessionOutcome, SessionSummary } from './useGrokRetryVideoSessions';
 import type { PostRouteIdentity } from './useGrokRetryPostId';
 
-const CLICK_COOLDOWN = 8000; // 8 seconds between retries
+export const CLICK_COOLDOWN_MS = 8000; // 8 seconds between retries
 const PROGRESS_BUTTON_SELECTOR = 'button[aria-label="Video Options"]';
 const MAX_PROGRESS_RECORDS = 25;
 
@@ -86,7 +86,7 @@ const parseProgress = (text?: string | null): number | null => {
  */
 export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
     const store = useGrokRetryVideoSessions(postId);
-    const { data: postData, isLoading, updateSession, updatePersistent, updateAll, clearSession } = store;
+    const { data: postData, isLoading, updateSession, updatePersistent, updateAll, clearSession, forceReload } = store;
 
     const [lastClickTime, setLastClickTime] = useState(0);
     const [originalPageTitle, setOriginalPageTitle] = useState('');
@@ -118,6 +118,8 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
     const lastSessionOutcome = postData?.outcome ?? 'idle';
     const lastSessionSummary = postData?.lastSessionSummary ?? null;
     const logs = postData?.logs ?? [];
+    const pendingRetryAt = postData?.pendingRetryAt ?? null;
+    const pendingRetryPrompt = postData?.pendingRetryPrompt ?? null;
 
     try {
         const w = window as any;
@@ -125,6 +127,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             isSessionActive: postData?.isActive ?? false,
             retryCount: postData?.retryCount ?? 0,
             canRetry: postData?.canRetry ?? false,
+            pendingRetryAt: postData?.pendingRetryAt ?? null,
         };
     } catch { }
 
@@ -168,6 +171,26 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             detail: { key: postId, postId, line, level }
         }));
     }, [postData, updateSession, postId]);
+
+    const appendLogRef = useRef(appendLog);
+
+    useEffect(() => {
+        appendLogRef.current = appendLog;
+    }, [appendLog]);
+
+    useEffect(() => {
+        const bridge = (line: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
+            appendLogRef.current?.(line, level);
+        };
+
+        (window as any).__grok_append_log = bridge;
+
+        return () => {
+            try {
+                delete (window as any).__grok_append_log;
+            } catch { }
+        };
+    }, []);
 
     const resetProgressTracking = useCallback(() => {
         updateSession({ attemptProgress: [] });
@@ -260,19 +283,23 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         updateSession({
             videosGenerated: newCount,
             creditsUsed: creditsUsed + 1,
+            pendingRetryAt: null,
+            pendingRetryPrompt: null,
         });
 
         appendLog(`Video ${newCount}/${videoGoal} generated successfully`, 'success');
         stopProgressObserver();
     }, [postData, videosGenerated, videoGoal, creditsUsed, updateSession, appendLog, stopProgressObserver]);
 
-    const clickMakeVideoButton = useCallback((promptValue?: string, options?: { overridePermit?: boolean }) => {
+    const clickMakeVideoButton = useCallback((promptValue?: string, options?: { overridePermit?: boolean; context?: string }) => {
         const now = Date.now();
-        const timeUntilReady = lastClickTime + CLICK_COOLDOWN - now;
+        const timeUntilReady = lastClickTime + CLICK_COOLDOWN_MS - now;
+        const logContext = options?.context ? ` [${options.context}]` : '';
 
         if (timeUntilReady > 0) {
-            console.log(`[Grok Retry] Cooldown active, retrying in ${Math.ceil(timeUntilReady / 1000)}s...`);
-            appendLog(`Cooldown active — next attempt in ${Math.ceil(timeUntilReady / 1000)}s`, 'info');
+            const seconds = Math.ceil(timeUntilReady / 1000);
+            console.log(`[Grok Retry] Cooldown active${logContext}, retrying in ${seconds}s...`);
+            appendLog(`Cooldown active — next attempt in ${seconds}s`, 'info');
 
             // Schedule the click after cooldown
             if (cooldownTimeoutRef.current) {
@@ -288,6 +315,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
 
         // Guard: only click after a failure notification explicitly enables retry
         if (!postData?.canRetry && !options?.overridePermit) {
+            console.warn(`[Grok Retry] Guard prevented click${logContext} — canRetry false`);
             appendLog('Guard — waiting for failure notification before retrying');
             return false;
         }
@@ -305,14 +333,14 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         }
 
         if (!button) {
-            console.error('[Grok Retry] Make video button not found');
+            console.error(`[Grok Retry] Make video button not found${logContext}. Tried selectors: ${selectors.join(', ')}`);
             appendLog('Button not found - cannot retry', 'error');
             return false;
         }
 
         const promptEntry = findPromptInput();
         if (!promptEntry) {
-            console.warn('[Grok Retry] Could not find prompt input');
+            console.warn(`[Grok Retry] Prompt input not found${logContext}`);
             appendLog('Prompt input not found', 'warn');
             return false;
         }
@@ -326,12 +354,16 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             }
         }
 
-        console.log('[Grok Retry] Clicking button');
+        console.log(`[Grok Retry] Clicking button${logContext}`);
         button.click();
         appendLog('Clicked "Make video" button', 'info');
 
         setLastClickTime(now);
-        updateSession({ lastAttemptTime: now });
+        updateSession({
+            lastAttemptTime: now,
+            pendingRetryAt: null,
+            pendingRetryPrompt: null,
+        });
 
         return true;
     }, [postData, lastClickTime, lastPromptValue, updateSession, appendLog]);
@@ -351,6 +383,8 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
                 outcome: 'pending',
                 currentPostId: postId,
                 processedAttemptIds: postId ? [postId] : [],
+                pendingRetryAt: null,
+                pendingRetryPrompt: null,
             },
             {
                 lastPromptValue: prompt,
@@ -389,6 +423,8 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             isActive: false,
             outcome,
             lastSessionSummary: skipSummary ? null : summary,
+            pendingRetryAt: null,
+            pendingRetryPrompt: null,
         });
 
         appendLog(`Session ended: ${outcome}`, outcome === 'success' ? 'success' : 'error');
@@ -430,5 +466,9 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         endSession,
         startProgressObserver,
         stopProgressObserver,
+        forceReload,
+        pendingRetryAt,
+        pendingRetryPrompt,
+        updateSession,
     };
 };

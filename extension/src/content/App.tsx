@@ -1,8 +1,9 @@
 import React, { useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useGrokRetry } from "@/hooks/useGrokRetry";
+import { useGrokRetry, CLICK_COOLDOWN_MS } from "@/hooks/useGrokRetry";
 import { useGrokRetryUI } from "@/hooks/useGrokRetryUI";
 import { useGrokRetryGrokStorage } from "@/hooks/useGrokRetryGrokStorage";
+import { useGrokRetryModerationDetector } from "@/hooks/useGrokRetryModerationDetector";
 import { useGrokRetrySuccessDetector } from "@/hooks/useGrokRetrySuccessDetector";
 import { useGrokRetryPageTitle } from "@/hooks/useGrokRetryPageTitle";
 import { useGrokRetryPromptCapture } from "@/hooks/useGrokRetryPromptCapture";
@@ -26,6 +27,7 @@ const ImaginePostApp: React.FC = () => {
 	const isImaginePostRoute = useGrokRetryRouteMatch("^/imagine/post/");
 	const { postId, mediaId } = useGrokRetryPostId();
 	const { settings: globalSettings, isLoading: globalSettingsLoading } = useGrokRetrySettings();
+	const generationDelayMs = globalSettings?.videoGenerationDelay ?? 8000;
 	const muteControl = useGrokRetryMuteController(isImaginePostRoute);
 	const retry = useGrokRetry({ postId, mediaId });
 	const {
@@ -45,6 +47,7 @@ const ImaginePostApp: React.FC = () => {
 		resetRetries,
 		updatePromptValue,
 		clickMakeVideoButton,
+		startProgressObserver,
 		startSession,
 		endSession,
 		logs = [],
@@ -53,18 +56,39 @@ const ImaginePostApp: React.FC = () => {
 		clearLogs,
 		lastSessionOutcome,
 		lastSessionSummary,
-		appendLog, // Now comes from useGrokRetry
+		forceReload, // Force reload store when DOM triggers detected
+		pendingRetryAt,
+		pendingRetryPrompt,
+		updateSession,
 	} = retry;
 
-	// Provide global append log helper for detectors (now uses centralized store)
+	// Wire up test bridge for endSession so grace period auto-cancel works
 	useEffect(() => {
-		(window as any).__grok_append_log = appendLog;
+		const w = window as any;
+		if (w.__grok_test) {
+			w.__grok_test.endSession = (outcome?: string) => {
+				console.log("[Grok Retry] Test bridge endSession called with outcome:", outcome);
+				// Type guard to ensure outcome is a valid SessionOutcome
+				const validOutcome =
+					outcome === "success" || outcome === "failure" || outcome === "cancelled" ? outcome : "cancelled";
+				endSession(validOutcome);
+			};
+		}
 		return () => {
-			try {
-				delete (window as any).__grok_append_log;
-			} catch {}
+			if (w.__grok_test) {
+				delete w.__grok_test.endSession;
+			}
 		};
-	}, [appendLog]);
+	}, [endSession]);
+
+	// Expose forceReload globally for grace period logic to trigger attempt processing
+	useEffect(() => {
+		const w = window as any;
+		w.__grok_force_reload = forceReload;
+		return () => {
+			delete w.__grok_force_reload;
+		};
+	}, [forceReload]);
 
 	const { data: uiPrefs, save: saveUIPref } = useGrokRetryUI();
 	const { capturePromptFromSite, copyPromptToSite, setupClickListener } = useGrokRetryPromptCapture();
@@ -74,10 +98,105 @@ const ImaginePostApp: React.FC = () => {
 	const [showDebug, setShowDebug] = React.useState(false);
 	const [settingsOpen, setSettingsOpen] = React.useState(false);
 	const nextVideoTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+	const pendingModerationRetryRef = React.useRef(false);
+	const moderationValidationRequestedRef = React.useRef<"ui" | null>(null);
+	const successValidationRequestedRef = React.useRef<"ui" | null>(null);
 	const hasCheckedInterruptedSession = React.useRef(false);
 	const [showResults, setShowResults] = React.useState(false);
 	const lastSummarySignatureRef = React.useRef<string | null>(null);
 	const sessionPromptRef = React.useRef<string | null>(null);
+
+	const scheduleRetryAttempt = React.useCallback(
+		function scheduleRetryAttempt(promptSeed: string | null, delayMs: number, context: string = "unknown") {
+			const normalizedDelay = Math.max(0, delayMs);
+			const targetTime = Date.now() + normalizedDelay;
+
+			if (nextVideoTimeoutRef.current) {
+				clearTimeout(nextVideoTimeoutRef.current);
+				nextVideoTimeoutRef.current = null;
+			}
+
+			const persistedPrompt = promptSeed ?? sessionPromptRef.current ?? null;
+			const delaySeconds = Math.round((normalizedDelay / 1000) * 10) / 10;
+			console.log("[Grok Retry] Scheduling retry", {
+				context,
+				delayMs: normalizedDelay,
+				delaySeconds,
+				hasPersistedPrompt: !!persistedPrompt,
+				sessionPromptCached: !!sessionPromptRef.current,
+				pendingModerationRetry: pendingModerationRetryRef.current,
+				isSessionActive,
+				lastAttemptTime,
+			});
+
+			pendingModerationRetryRef.current = true;
+			updateSession({
+				pendingRetryAt: targetTime,
+				pendingRetryPrompt: persistedPrompt,
+			});
+
+			nextVideoTimeoutRef.current = setTimeout(() => {
+				console.log("[Grok Retry] Retry timer fired", {
+					context,
+					hasPersistedPrompt: !!persistedPrompt,
+					sessionPromptCached: !!sessionPromptRef.current,
+					isSessionActive,
+					pendingModerationRetry: pendingModerationRetryRef.current,
+					lastAttemptTime,
+				});
+				pendingModerationRetryRef.current = false;
+				nextVideoTimeoutRef.current = null;
+
+				if (!isSessionActive) {
+					console.log("[Grok Retry] Retry timer aborted - session inactive", { context });
+					updateSession({ pendingRetryAt: null, pendingRetryPrompt: null });
+					return;
+				}
+
+				const retryPrompt =
+					persistedPrompt ?? sessionPromptRef.current ?? capturePromptFromSite() ?? lastPromptValue;
+
+				const clicked = clickMakeVideoButton(retryPrompt ?? undefined, { overridePermit: false });
+				if (clicked) {
+					console.log("[Grok Retry] Retry click succeeded", {
+						context,
+						hasRetryPrompt: !!retryPrompt,
+					});
+					if (retryPrompt) {
+						sessionPromptRef.current = retryPrompt;
+					}
+					setTimeout(() => {
+						if (isSessionActive) {
+							startProgressObserver();
+						}
+					}, 800);
+					updateSession({ pendingRetryAt: null, pendingRetryPrompt: null });
+					return;
+				}
+
+				console.warn("[Grok Retry] Retry click blocked - rescheduling", {
+					context,
+					hasRetryPrompt: !!retryPrompt,
+					lastAttemptTime,
+				});
+				const cooldownRemaining = lastAttemptTime
+					? Math.max(0, lastAttemptTime + CLICK_COOLDOWN_MS - Date.now())
+					: 0;
+				const fallbackDelay = Math.max(cooldownRemaining + 200, 1500);
+				const rescheduleContext = context ? `${context}:fallback` : "fallback";
+				scheduleRetryAttempt(retryPrompt ?? null, fallbackDelay, rescheduleContext);
+			}, normalizedDelay);
+		},
+		[
+			isSessionActive,
+			updateSession,
+			capturePromptFromSite,
+			lastPromptValue,
+			clickMakeVideoButton,
+			startProgressObserver,
+			lastAttemptTime,
+		]
+	);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -103,69 +222,141 @@ const ImaginePostApp: React.FC = () => {
 	);
 
 	// Handle moderation detection
-	const handleModerationDetected = React.useCallback(() => {
-		// Don't retry if session is not active
-		if (!isSessionActive) {
-			console.log("[Grok Retry] Ignoring moderation - session not active");
-			return;
-		}
+	const handleModerationDetected = React.useCallback(
+		(source: "storage" | "ui" = "storage") => {
+			moderationValidationRequestedRef.current = null;
 
-		// Check for rapid failure (≤6 seconds) - indicates immediate automated content check
-		if (lastAttemptTime > 0) {
-			const timeSinceAttempt = Date.now() - lastAttemptTime;
-			if (timeSinceAttempt <= 6000) {
-				console.warn("[Grok Retry] Rapid failure detected (<6s) - likely automated content check on prompt/image");
+			// Don't retry if session is not active
+			if (!isSessionActive) {
+				console.log("[Grok Retry] Ignoring moderation - session not active", { source });
+				return;
 			}
-		}
 
-		const shouldRetry = autoRetryEnabled && retryCount < maxRetries;
-		console.log("[Grok Retry] Moderation detected, current count:", retryCount);
-
-		let promptSnapshot = sessionPromptRef.current ?? lastPromptValue;
-		if (!promptSnapshot && retryCount === 0) {
-			const captured = capturePromptFromSite();
-			if (captured) {
-				promptSnapshot = captured;
-				sessionPromptRef.current = captured;
-				updatePromptValue(captured);
-				console.log("[Grok Retry] Auto-captured prompt on first moderation");
+			if (pendingModerationRetryRef.current) {
+				console.log("[Grok Retry] Moderation already handled — awaiting pending retry", { source });
+				return;
 			}
-		}
 
-		const failureLayer = markFailureDetected();
-		recordPromptOutcome("failure", failureLayer);
+			// Check for rapid failure (≤6 seconds) - indicates immediate automated content check
+			if (lastAttemptTime > 0) {
+				const timeSinceAttempt = Date.now() - lastAttemptTime;
+				if (timeSinceAttempt <= 6000) {
+					console.warn(
+						"[Grok Retry] Rapid failure detected (<6s) - likely automated content check on prompt/image",
+						{
+							source,
+							timeSinceAttempt,
+						}
+					);
+				}
+			}
 
-		if (!shouldRetry) {
-			console.log("[Grok Retry] Moderation detected but not retrying:", {
-				autoRetryEnabled,
+			const shouldRetry = autoRetryEnabled && retryCount < maxRetries;
+			console.log("[Grok Retry] Moderation detected", {
 				retryCount,
-				maxRetries,
+				source,
 			});
 
-			if (isSessionActive) {
-				console.log("[Grok Retry] Ending session - no retry will occur");
-				const outcome = autoRetryEnabled ? "failure" : "cancelled";
-				endSession(outcome);
+			let promptSnapshot = sessionPromptRef.current ?? lastPromptValue;
+			if (!promptSnapshot && retryCount === 0) {
+				const captured = capturePromptFromSite();
+				if (captured) {
+					promptSnapshot = captured;
+					sessionPromptRef.current = captured;
+					updatePromptValue(captured);
+					console.log("[Grok Retry] Auto-captured prompt on first moderation");
+				}
 			}
-			return;
-		}
 
-		if (promptSnapshot) {
-			sessionPromptRef.current = promptSnapshot;
-		}
-	}, [
-		isSessionActive,
-		lastAttemptTime,
-		autoRetryEnabled,
-		retryCount,
-		maxRetries,
-		lastPromptValue,
-		capturePromptFromSite,
-		updatePromptValue,
-		endSession,
-		markFailureDetected,
-		recordPromptOutcome,
-	]);
+			const failureLayer = markFailureDetected();
+			recordPromptOutcome("failure", failureLayer);
+
+			if (!shouldRetry) {
+				console.log("[Grok Retry] Moderation detected but not retrying:", {
+					autoRetryEnabled,
+					retryCount,
+					maxRetries,
+					source,
+				});
+
+				if (isSessionActive) {
+					console.log("[Grok Retry] Ending session - no retry will occur");
+					const outcome = autoRetryEnabled ? "failure" : "cancelled";
+					endSession(outcome);
+				}
+				return;
+			}
+
+			if (promptSnapshot) {
+				sessionPromptRef.current = promptSnapshot;
+			}
+
+			if (nextVideoTimeoutRef.current) {
+				clearTimeout(nextVideoTimeoutRef.current);
+				nextVideoTimeoutRef.current = null;
+			}
+
+			const cooldownRemaining = lastAttemptTime ? Math.max(0, lastAttemptTime + CLICK_COOLDOWN_MS - Date.now()) : 0;
+			const retryDelay = Math.max(cooldownRemaining, 1200);
+			const retryNumber = retryCount + 1;
+			const delaySeconds = Math.round((retryDelay / 1000) * 10) / 10;
+			console.log(`[Grok Retry] Scheduling retry ${retryNumber}/${maxRetries} in ${delaySeconds}s`, {
+				source,
+			});
+
+			const scheduledPrompt = sessionPromptRef.current ?? promptSnapshot ?? lastPromptValue ?? null;
+			scheduleRetryAttempt(scheduledPrompt, retryDelay, "moderation");
+		},
+		[
+			isSessionActive,
+			lastAttemptTime,
+			autoRetryEnabled,
+			retryCount,
+			maxRetries,
+			lastPromptValue,
+			capturePromptFromSite,
+			updatePromptValue,
+			endSession,
+			markFailureDetected,
+			recordPromptOutcome,
+			scheduleRetryAttempt,
+		]
+	);
+
+	const requestModerationValidation = React.useCallback(
+		(source: "ui") => {
+			const sessionEngaged = isSessionActive || Boolean(pendingRetryAt);
+			if (!sessionEngaged) {
+				console.log("[Grok Retry] Ignoring moderation validation request - session not engaged", { source });
+				return;
+			}
+
+			if (moderationValidationRequestedRef.current === source) {
+				console.log("[Grok Retry] Moderation validation already pending", { source });
+				return;
+			}
+
+			moderationValidationRequestedRef.current = source;
+			console.log("[Grok Retry] Moderation detected via UI - requesting Grok storage validation");
+
+			if (typeof forceReload === "function") {
+				setTimeout(() => {
+					// If storage resolution already happened, bail out
+					if (moderationValidationRequestedRef.current !== source) {
+						return;
+					}
+					console.log("[Grok Retry] Triggering storage reload for moderation validation");
+					forceReload();
+				}, 0);
+			}
+		},
+		[forceReload, isSessionActive, pendingRetryAt]
+	);
+
+	const { rateLimitDetected } = useGrokRetryModerationDetector({
+		onModerationDetected: () => requestModerationValidation("ui"),
+		enabled: Boolean(isImaginePostRoute && (isSessionActive || pendingRetryAt)),
+	});
 
 	// Grok storage monitoring for moderation detection and validation
 	// This monitors Grok's sessionStorage for authoritative video data
@@ -179,9 +370,15 @@ const ImaginePostApp: React.FC = () => {
 				thumbnailUrl: video.thumbnailImageUrl,
 			});
 
-			// Trigger moderation handling as validation/fallback
-			// This confirms UI detection or catches it if UI structure changes
-			handleModerationDetected();
+			// Process moderation locally before forcing a reload so counters persist
+			handleModerationDetected("storage");
+
+			if (forceReload) {
+				setTimeout(() => {
+					console.log("[Grok Retry] Moderation detected - triggering store reload");
+					forceReload();
+				}, 0);
+			}
 		},
 		onVideoDetected: (video) => {
 			console.log("[Grok Storage] Video detected:", {
@@ -195,57 +392,128 @@ const ImaginePostApp: React.FC = () => {
 	});
 
 	// Handle successful video generation
-	const handleSuccess = React.useCallback(() => {
-		// Only handle success if a session is active
-		if (!isSessionActive) {
-			console.log("[Grok Retry] Success detected but no active session - ignoring");
-			if (nextVideoTimeoutRef.current) {
-				clearTimeout(nextVideoTimeoutRef.current);
+	const handleSuccess = React.useCallback(
+		(source: "storage" | "ui" = "storage") => {
+			successValidationRequestedRef.current = null;
+			pendingModerationRetryRef.current = false;
+
+			const newVideoCount = videosGenerated + 1;
+			console.log("[Grok Retry] Success confirmed", {
+				source,
+				videosGenerated: newVideoCount,
+				videoGoal,
+			});
+			incrementVideosGenerated();
+			recordPromptOutcome("success");
+
+			if (forceReload) {
+				setTimeout(() => {
+					console.log("[Grok Retry] Success detected - triggering store reload");
+					forceReload();
+				}, 0);
 			}
 
-			// Wait 8 seconds before next generation
+			if (nextVideoTimeoutRef.current) {
+				clearTimeout(nextVideoTimeoutRef.current);
+				nextVideoTimeoutRef.current = null;
+			}
+
+			if (!isSessionActive) {
+				return;
+			}
+
+			if (newVideoCount >= videoGoal) {
+				endSession("success");
+				return;
+			}
+
 			nextVideoTimeoutRef.current = setTimeout(() => {
-				// Check if session is still active before proceeding
 				if (!isSessionActive) {
 					console.log("[Grok Retry] Skipping next video - session cancelled");
 					return;
 				}
-				// Do not reset retryCount; maxRetries applies to whole session
-				// Use overridePermit since this is a new video generation, not a retry
-				clickMakeVideoButton(lastPromptValue, { overridePermit: true });
+
+				const clicked = clickMakeVideoButton(lastPromptValue, { overridePermit: true });
+				if (clicked) {
+					setTimeout(() => {
+						if (isSessionActive) {
+							startProgressObserver();
+						}
+					}, 800);
+				}
+
 				nextVideoTimeoutRef.current = null;
-			}, 8000);
+			}, generationDelayMs);
+		},
+		[
+			generationDelayMs,
+			videosGenerated,
+			videoGoal,
+			incrementVideosGenerated,
+			recordPromptOutcome,
+			forceReload,
+			isSessionActive,
+			endSession,
+			clickMakeVideoButton,
+			lastPromptValue,
+			startProgressObserver,
+		]
+	);
+
+	const requestSuccessValidation = React.useCallback(() => {
+		if (!isSessionActive) {
+			console.log("[Grok Retry] Ignoring success validation request - session not active");
+			return;
 		}
-	}, [
-		incrementVideosGenerated,
-		videosGenerated,
-		videoGoal,
-		endSession,
-		isSessionActive,
-		clickMakeVideoButton,
-		lastPromptValue,
-		recordPromptOutcome,
-	]);
+
+		if (successValidationRequestedRef.current === "ui") {
+			console.log("[Grok Retry] Success validation already pending");
+			return;
+		}
+
+		successValidationRequestedRef.current = "ui";
+		console.log("[Grok Retry] Success detected via UI - requesting Grok storage validation");
+
+		if (typeof forceReload === "function") {
+			setTimeout(() => {
+				if (successValidationRequestedRef.current !== "ui") {
+					return;
+				}
+				console.log("[Grok Retry] Triggering storage reload for success validation");
+				forceReload();
+			}, 0);
+		}
+	}, [forceReload, isSessionActive]);
 
 	// Keep success detector running while on imagine post page, not just when session is active
 	// This ensures we detect success even if session timeout occurs during video generation
-	useGrokRetrySuccessDetector(handleSuccess, !!postId);
+	useGrokRetrySuccessDetector({
+		onStorageSuccess: () => handleSuccess("storage"),
+		onUISuccessSignal: requestSuccessValidation,
+		enabled: Boolean(postId),
+	});
 
 	// Auto-cancel interrupted sessions on mount (after refresh/navigation) - only once
 	useEffect(() => {
 		if ((window as any).__grok_test?.skipAutoCancel) {
 			return;
 		}
-		console.log(
-			"[Grok Retry] Auto-cancel effect - isLoading:",
+
+		const hasPendingRetry = pendingModerationRetryRef.current || !!pendingRetryAt;
+		console.log("[Grok Retry] Session resume guard", {
 			isLoading,
-			"hasChecked:",
-			hasCheckedInterruptedSession.current,
-			"isSessionActive:",
+			hasChecked: hasCheckedInterruptedSession.current,
 			isSessionActive,
-			"postId:",
-			postId
-		);
+			postId,
+			hasPendingRetry,
+			pendingRetryAt,
+		});
+
+		// Skip auto-cancel while a retry timer is scheduled so we can resume normally after reload
+		if (hasPendingRetry) {
+			console.log("[Grok Retry] Session resume guard - pending retry detected; skipping auto-cancel");
+			return;
+		}
 
 		// Wait for both loading to complete AND postId to be available
 		if (!isLoading && postId && !hasCheckedInterruptedSession.current) {
@@ -265,22 +533,31 @@ const ImaginePostApp: React.FC = () => {
 				}, 50);
 			}
 		}
-	}, [isLoading, isSessionActive, endSession, postId]);
+	}, [isLoading, isSessionActive, endSession, postId, pendingRetryAt]);
 
-	// Fallback check - run once after a short delay to catch any race conditions
+	// Fallback check - re-evaluated when session state changes to catch race conditions
 	useEffect(() => {
 		if ((window as any).__grok_test?.skipAutoCancel) {
 			return;
 		}
+
+		if (hasCheckedInterruptedSession.current || !postId || !isSessionActive) {
+			return;
+		}
+
+		const hasPendingRetry = pendingModerationRetryRef.current || !!pendingRetryAt;
+		if (hasPendingRetry) {
+			console.log("[Grok Retry] Session resume fallback - pending retry detected; skipping auto-cancel");
+			return;
+		}
+
 		const timeoutId = setTimeout(() => {
-			console.log(
-				"[Grok Retry] Fallback timeout - hasChecked:",
-				hasCheckedInterruptedSession.current,
-				"isSessionActive:",
+			console.log("[Grok Retry] Session resume fallback", {
+				hasChecked: hasCheckedInterruptedSession.current,
 				isSessionActive,
-				"postId:",
-				postId
-			);
+				postId,
+				pendingRetryAt,
+			});
 			if (!hasCheckedInterruptedSession.current && isSessionActive && postId) {
 				console.log("[Grok Retry] Fallback: Detected active session after delay - auto-canceling");
 				hasCheckedInterruptedSession.current = true;
@@ -289,7 +566,41 @@ const ImaginePostApp: React.FC = () => {
 		}, 200);
 
 		return () => clearTimeout(timeoutId);
-	}, []);
+	}, [isSessionActive, postId, pendingRetryAt, endSession]);
+
+	React.useEffect(() => {
+		if (!isSessionActive || !autoRetryEnabled) {
+			return;
+		}
+
+		if (!pendingRetryAt) {
+			return;
+		}
+
+		if (nextVideoTimeoutRef.current || pendingModerationRetryRef.current) {
+			return;
+		}
+
+		const now = Date.now();
+		const delay = Math.max(0, pendingRetryAt - now);
+		const persistedPrompt = pendingRetryPrompt ?? null;
+		console.log("[Grok Retry] Resuming persisted retry", {
+			delayMs: delay,
+			hasPersistedPrompt: !!persistedPrompt,
+			sessionPromptCached: !!sessionPromptRef.current,
+			retryCount,
+			maxRetries,
+		});
+		scheduleRetryAttempt(persistedPrompt, delay, "persisted-resume");
+	}, [
+		pendingRetryAt,
+		pendingRetryPrompt,
+		isSessionActive,
+		autoRetryEnabled,
+		retryCount,
+		maxRetries,
+		scheduleRetryAttempt,
+	]);
 
 	// Set up page title updates
 	useGrokRetryPageTitle(
@@ -297,7 +608,7 @@ const ImaginePostApp: React.FC = () => {
 		retryCount,
 		maxRetries,
 		autoRetryEnabled,
-		false, // isRateLimited - no longer using UI-based rate limit detection
+		rateLimitDetected,
 		videoGoal,
 		videosGenerated,
 		isSessionActive,
@@ -307,6 +618,11 @@ const ImaginePostApp: React.FC = () => {
 	React.useEffect(() => {
 		if (!isSessionActive) {
 			sessionPromptRef.current = null;
+			pendingModerationRetryRef.current = false;
+			if (nextVideoTimeoutRef.current) {
+				clearTimeout(nextVideoTimeoutRef.current);
+				nextVideoTimeoutRef.current = null;
+			}
 		}
 	}, [isSessionActive]);
 
@@ -431,6 +747,7 @@ const ImaginePostApp: React.FC = () => {
 			nextVideoTimeoutRef.current = null;
 			console.log("[Grok Retry] Cleared pending next video timeout");
 		}
+		pendingModerationRetryRef.current = false;
 		endSession("cancelled");
 		sessionPromptRef.current = null;
 	}, [endSession]);

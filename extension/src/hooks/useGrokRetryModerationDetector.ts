@@ -1,16 +1,36 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { selectors } from '../config/selectors';
 
-const MODERATION_TEXT = "Content Moderated. Try a different idea.";
+const MODERATION_TEXT_MATCHERS = [
+    'content moderated',
+    "content moderated. try a different idea.",
+    'content was moderated',
+    'content violates our policies',
+    "doesn't fit our guidelines",
+    'violates our guidelines',
+    'blocked for moderation',
+    'try a different idea',
+    'moderated',
+] as const;
 const RATE_LIMIT_TEXT = "Rate limit reached";
 const MODERATION_TRIGGER_COOLDOWN_MS = 5000; // hard guard between callbacks
 const MODERATION_HOLD_MS = 2000; // keep detected state for stability
+const MODERATION_IMAGE_SELECTOR = 'img[alt*="moderated" i], img[alt*="content moderated" i]';
 
 interface ModerationDetectorOptions {
     onModerationDetected: () => void;
     onRateLimitDetected?: () => void;
     enabled: boolean;
 }
+
+const normalizeText = (value: string): string => value.replace(/\s+/g, ' ').trim().toLowerCase();
+
+const findModerationMatch = (value: string | null | undefined): string | null => {
+    if (!value) return null;
+    const normalized = normalizeText(value);
+    if (!normalized) return null;
+    return MODERATION_TEXT_MATCHERS.find((candidate) => normalized.includes(candidate)) ?? null;
+};
 
 /**
  * Detects moderation and rate limit events via DOM observation.
@@ -54,53 +74,73 @@ export const useGrokRetryModerationDetector = ({
     const lastModerationFingerprintRef = useRef<string>('');
 
     const checkForModeration = useCallback(() => {
-        // Prefer notifications toaster when present
         const notificationsSection = document.querySelector(selectors.notifications.section);
         let isModerationDetected = false;
         let isRateLimitDetected = false;
+        let moderationFingerprint: string | null = null;
+        let moderationSource: string | null = null;
 
         if (notificationsSection) {
-            // Check latest toast text
             const latestToast = notificationsSection.querySelector<HTMLLIElement>('li.toast[data-visible="true"]');
             const textNode = latestToast?.querySelector<HTMLElement>('span, div');
             const text = textNode?.textContent ?? '';
-            // Avoid refiring on identical toast text in rapid succession
+
             if (text && text !== lastToastTextRef.current) {
                 lastToastTextRef.current = text;
             }
-            isModerationDetected = text.includes(MODERATION_TEXT);
-            isRateLimitDetected = text.includes(RATE_LIMIT_TEXT);
-        } else {
-            // Fallback: scan a smaller scope (main container) instead of full body
-            const main = document.querySelector(selectors.containers.main) ?? document.body;
-            const scopedText = main?.textContent ?? '';
-            isModerationDetected = scopedText.includes(MODERATION_TEXT);
-            isRateLimitDetected = scopedText.includes(RATE_LIMIT_TEXT);
-        }
 
-        // Handle moderation detection
-        if (isModerationDetected && !moderationDetected) {
-            // Don't schedule a new timeout if one is already pending
-            if (debounceTimeout) {
-                return; // Already processing this moderation event
+            const toastMatch = findModerationMatch(text);
+            if (toastMatch) {
+                isModerationDetected = true;
+                moderationFingerprint = `toast:${toastMatch}:${normalizeText(text).slice(0, 80)}`;
+                moderationSource = 'toast';
             }
 
-            // Create a fingerprint for this moderation event to deduplicate
-            const notificationsSection = document.querySelector(selectors.notifications.section);
-            const latestToast = notificationsSection?.querySelector<HTMLLIElement>('li.toast[data-visible="true"]');
-            const toastText = latestToast?.textContent?.trim() || '';
-            const timestamp = Math.floor(Date.now() / 1000); // Round to nearest second
-            const fingerprint = `${toastText}_${timestamp}`;
+            if (text.includes(RATE_LIMIT_TEXT)) {
+                isRateLimitDetected = true;
+            }
+        }
 
-            // Only proceed if this is a new unique moderation event
+        if (!isModerationDetected) {
+            const moderatedImages = document.querySelectorAll(MODERATION_IMAGE_SELECTOR);
+            if (moderatedImages.length > 0) {
+                const parts = Array.from(moderatedImages)
+                    .map((img) => img.getAttribute('src') || img.getAttribute('alt') || img.getAttribute('data-testid') || '')
+                    .filter(Boolean);
+                moderationFingerprint = `image:${parts.join('|') || 'unknown'}`;
+                moderationSource = 'overlay';
+                isModerationDetected = true;
+            }
+        }
+
+        const main = document.querySelector(selectors.containers.main) ?? document.body;
+        const scopedText = main?.textContent ?? '';
+
+        if (!isModerationDetected) {
+            const scopedMatch = findModerationMatch(scopedText);
+            if (scopedMatch) {
+                moderationFingerprint = `text:${scopedMatch}`;
+                moderationSource = 'text';
+                isModerationDetected = true;
+            }
+        }
+
+        if (!isRateLimitDetected && scopedText.includes(RATE_LIMIT_TEXT)) {
+            isRateLimitDetected = true;
+        }
+
+        if (isModerationDetected && !moderationDetected) {
+            if (debounceTimeout) {
+                return;
+            }
+
+            const fingerprint = moderationFingerprint ?? `fallback:${Date.now()}`;
             if (fingerprint === lastModerationFingerprintRef.current) {
-                return; // Same event, ignore
+                return;
             }
             lastModerationFingerprintRef.current = fingerprint;
 
-            // Debounce the callback to prevent multiple rapid fires
             const timeout = setTimeout(() => {
-                // Guard: prevent multiple triggers within cooldown window
                 const now = Date.now();
                 if (now - lastTriggerAtRef.current < MODERATION_TRIGGER_COOLDOWN_MS) {
                     setDebounceTimeout(null);
@@ -108,18 +148,19 @@ export const useGrokRetryModerationDetector = ({
                 }
                 lastTriggerAtRef.current = now;
                 setModerationDetected(true);
-                console.log('[Grok Retry] Moderation detected');
-                try { (window as any).__grok_append_log?.('Moderation detected', 'warn'); } catch { }
+                const label = moderationSource ? ` via ${moderationSource}` : '';
+                console.log(`[Grok Retry] Moderation detected${label}`);
+                try { (window as any).__grok_append_log?.(`Moderation detected${label}`, 'warn'); } catch { }
                 onModerationDetected();
                 setDebounceTimeout(null);
             }, 100);
 
             setDebounceTimeout(timeout);
         } else if (!isModerationDetected && moderationDetected) {
-            // Hold the detected state briefly to avoid oscillation on attribute churn
             const now = Date.now();
             if (now - lastTriggerAtRef.current >= MODERATION_HOLD_MS) {
                 setModerationDetected(false);
+                lastModerationFingerprintRef.current = '';
             }
         }
 

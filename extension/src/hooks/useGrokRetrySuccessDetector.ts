@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useGrokRetryPostId } from './useGrokRetryPostId';
 import { useGrokRetryGrokStorage } from './useGrokRetryGrokStorage';
+import type { GrokVideo } from './useGrokRetryGrokStorage';
 
 /**
  * Detects successful video generation via dual detection strategy.
@@ -24,16 +25,27 @@ import { useGrokRetryGrokStorage } from './useGrokRetryGrokStorage';
  * 
  * @example
  * ```tsx
- * useGrokRetrySuccessDetector(
- *   () => {
+ * useGrokRetrySuccessDetector({
+ *   onStorageSuccess: (video) => {
  *     incrementVideosGenerated();
  *     if (videosGenerated >= videoGoal) endSession('success');
  *   },
- *   isSessionActive
- * );
+ *   onUISuccessSignal: () => forceReload(),
+ *   enabled: isSessionActive,
+ * });
  * ```
  */
-export const useGrokRetrySuccessDetector = (onSuccess: () => void, isEnabled: boolean) => {
+interface SuccessDetectorOptions {
+    onStorageSuccess: (video: GrokVideo) => void;
+    onUISuccessSignal?: () => void;
+    enabled: boolean;
+}
+
+export const useGrokRetrySuccessDetector = ({
+    onStorageSuccess,
+    onUISuccessSignal,
+    enabled,
+}: SuccessDetectorOptions) => {
     const { postId, mediaId } = useGrokRetryPostId();
     const parentPostId = mediaId ?? postId;
     const lastCompletedAttemptIdRef = useRef<string | null>(null);
@@ -42,7 +54,7 @@ export const useGrokRetrySuccessDetector = (onSuccess: () => void, isEnabled: bo
     // Grok storage-based success detection (primary, authoritative)
     useGrokRetryGrokStorage(parentPostId, {
         onVideoDetected: (video) => {
-            if (!isEnabled) return;
+            if (!enabled) return;
 
             // Only trigger on successful videos (not moderated, has mediaUrl)
             if (!video.moderated && video.mediaUrl) {
@@ -57,7 +69,7 @@ export const useGrokRetrySuccessDetector = (onSuccess: () => void, isEnabled: bo
                 } catch {
                     // ignore log transport issues
                 }
-                onSuccess();
+                onStorageSuccess(video);
             }
         },
         pollInterval: 500, // Check every 500ms for success
@@ -66,7 +78,7 @@ export const useGrokRetrySuccessDetector = (onSuccess: () => void, isEnabled: bo
 
     // DOM-based success detection (fallback)
     useEffect(() => {
-        if (!isEnabled) {
+        if (!enabled) {
             if (domCheckIntervalRef.current) {
                 clearInterval(domCheckIntervalRef.current);
                 domCheckIntervalRef.current = null;
@@ -96,17 +108,18 @@ export const useGrokRetrySuccessDetector = (onSuccess: () => void, isEnabled: bo
                 // Success = video exists AND no moderation AND not loading
                 if (hasVideo && !hasModeration && !isLoading) {
                     const currentPostId = postId ?? 'unknown';
-                    if (lastCompletedAttemptIdRef.current === currentPostId) {
+                    const domAttemptKey = `dom:${currentPostId}`;
+                    if (lastCompletedAttemptIdRef.current === domAttemptKey) {
                         return; // Already detected
                     }
-                    lastCompletedAttemptIdRef.current = currentPostId;
+                    lastCompletedAttemptIdRef.current = domAttemptKey;
                     console.log(`[Grok Retry] Success detected via DOM for ${currentPostId}`);
                     try {
                         (window as any).__grok_append_log?.('Success detected (DOM)', 'success');
                     } catch {
                         // ignore log transport issues
                     }
-                    onSuccess();
+                    onUISuccessSignal?.();
                 }
             } catch (error) {
                 console.warn('[Grok Retry] DOM success check error:', error);
@@ -125,7 +138,7 @@ export const useGrokRetrySuccessDetector = (onSuccess: () => void, isEnabled: bo
                 domCheckIntervalRef.current = null;
             }
         };
-    }, [isEnabled, postId, onSuccess]);
+    }, [enabled, postId, onUISuccessSignal]);
 
     // Clear last completed when post changes
     useEffect(() => {
