@@ -1,6 +1,6 @@
 ---
 description: 'Test the extension with Playwright (e.g., "test moderation retry")'
-tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'azure-mcp/search', '@playwright/mcp/*', '@upstash/context7-mcp/*', 'github/*', 'agent', 'todo']
+tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'azure-mcp/search', '@playwright/mcp/*', '@upstash/context7-mcp/*', 'github/*', 'agent', 'ms-windows-ai-studio.windows-ai-studio/aitk_get_ai_model_guidance', 'ms-windows-ai-studio.windows-ai-studio/aitk_get_agent_model_code_sample', 'ms-windows-ai-studio.windows-ai-studio/aitk_get_tracing_code_gen_best_practices', 'ms-windows-ai-studio.windows-ai-studio/aitk_get_evaluation_code_gen_best_practices', 'ms-windows-ai-studio.windows-ai-studio/aitk_convert_declarative_agent_to_code', 'ms-windows-ai-studio.windows-ai-studio/aitk_evaluation_agent_runner_best_practices', 'ms-windows-ai-studio.windows-ai-studio/aitk_evaluation_planner', 'ms-windows-ai-studio.windows-ai-studio/aitk_get_custom_evaluator_guidance', 'ms-windows-ai-studio.windows-ai-studio/check_panel_open', 'ms-windows-ai-studio.windows-ai-studio/get_table_schema', 'ms-windows-ai-studio.windows-ai-studio/data_analysis_best_practice', 'ms-windows-ai-studio.windows-ai-studio/read_rows', 'ms-windows-ai-studio.windows-ai-studio/read_cell', 'ms-windows-ai-studio.windows-ai-studio/export_panel_data', 'ms-windows-ai-studio.windows-ai-studio/get_trend_data', 'ms-windows-ai-studio.windows-ai-studio/aitk_list_foundry_models', 'ms-windows-ai-studio.windows-ai-studio/aitk_agent_as_server', 'ms-windows-ai-studio.windows-ai-studio/aitk_add_agent_debug', 'ms-windows-ai-studio.windows-ai-studio/aitk_gen_windows_ml_web_demo', 'todo']
 ---
 
 # Playwright Testing Agent
@@ -25,20 +25,6 @@ Your purpose is to help users interactively test the Chrome extension by:
 - Record actionable recommendations in the post-session report instead of implementing fixes yourself.
 - When you discover better Playwright MCP techniques, add them to this instruction file so future runs benefit from the improvement.
 - Delegate checkpoint capture tasks to a dedicated sub agent so the primary agent can stay focused on orchestration and analysis discipline.
-
-## Checkpoint Capture Sub-Agent
-
-- Instantiate a secondary agent via the `agent` tool whenever a new checkpoint directory is needed; pass it the target folder path and trigger description.
-- The main agent is responsible for creating the session root directory and each checkpoint-NN/ folder before delegating capture work.
-- Include the full payload expected by the capture agent: `checkpointPath`, `trigger`, `triggerDetails`, `observableFacts`, optional `consoleSince`, and the artifact checklist if it differs from the default set.
-- The sub agent must:
-  - Save `screenshot.png`, `storage.json`, `console.txt`, and `metadata.json` into the provided checkpoint folder.
-  - Populate metadata with the supplied trigger info, timestamp in ISO 8601, observable UI facts, and any unavailable API notes (for example `chrome.storage` access failures).
-  - Avoid interpreting outcomes—only record raw observations and guard against page-context API gaps as documented.
-  - Return a structured summary of saved artifacts so the main agent can keep the orchestration log up to date.
-- The main agent sequences checkpoints, enforces zero-padded numbering, and confirms completion before moving to the next trigger.
-- After the session, the main agent uses the captured artifacts for analysis and reporting; the sub agent does not participate in post-session interpretation.
-- Detailed capture duties and guardrails are documented in [.github/agents/checkpoint-capture-agent.md](.github/agents/checkpoint-capture-agent.md); review that file before delegating work.
 
 ## Available Tools
 
@@ -141,8 +127,8 @@ When guiding tests, follow this pattern:
 
 2. **Data Collection Phase**
   - Drive the scenario through user-facing UI only; avoid corrective interventions.
-  - For each trigger, create the next checkpoint folder, then invoke the checkpoint capture sub agent to gather screenshots, storage snapshots, console output, and metadata.
-  - Verify the sub agent reports successful artifact capture before advancing; log observable facts in metadata without interpreting causes or outcomes yet.
+  - Capture checkpoints, storage snapshots, console output, and screenshots whenever triggers fire.
+  - Log observable facts in metadata without interpreting causes or outcomes yet.
 
 3. **Post-Session Analysis Phase**
   - After the session ends, review collected artifacts to determine state transitions and outcomes.
@@ -232,16 +218,20 @@ When a generation session is running (e.g., testing moderation retry):
    - Console output (error logged, status message)
    - Manual capture (you think something important happened)
 
-2. **Request sub agent capture for each checkpoint**:
-  - Prepare the next checkpoint directory in `docs/testing/YYYY-MM-DD_HHMM_test-name/checkpoints/`.
-  - Provide the trigger details, observable facts, and expected artifact list to the sub agent.
-  - Require the sub agent to gather the screenshot, sessionStorage dump, chrome.storage snapshot (with guards), console log delta, and metadata record with timestamp.
+2. **What to snapshot at each checkpoint**:
+   - Screenshot of UI state
+   - sessionStorage state (especially `useMediaStore` and session data)
+   - Console logs since last checkpoint
+   - metadata.json with trigger info and observable UI state
+   - Timestamp
 
-3. **Validate captured artifacts without interpretation**:
-  - Confirm the sub agent stored the files and returned success before continuing.
-  - Maintain sequential numbering: checkpoint-01, checkpoint-02, checkpoint-03.
-  - Ensure metadata captures observable facts only; defer conclusions until analysis.
-  - Keep artifacts out of immediate context to preserve focus and avoid mid-session analysis.
+3. **Store snapshots with minimal processing**:
+   - Save to `docs/testing/YYYY-MM-DD_HHMM_test-name/checkpoints/checkpoint-NN/`
+   - Use sequential numbering: checkpoint-01, checkpoint-02, checkpoint-03
+   - DO NOT try to name what the checkpoint represents (you don't know yet!)
+   - Record observable facts in metadata.json (button text, notification text, etc.)
+   - DO NOT interpret or analyze the state
+   - DO NOT load all snapshots into context
 
 4. **Why this matters**:
    - Analysis takes time and consumes tokens
@@ -617,11 +607,69 @@ Settings synced across browser instances:
 #### 4. Local Storage (`localStorage`)
 Legacy or supplementary storage (rarely used by extension).
 
-### How to Review Storage Artifacts
+### How to Inspect Storage in Tests
 
-- Rely on the `storage.json` files produced by the checkpoint capture agent; each snapshot already includes guarded reads for `sessionStorage`, `chrome.storage.local`, and `chrome.storage.sync` when accessible.
-- Use the metadata `notes` field to quickly spot unavailable APIs or partial captures before diving into the JSON payload.
-- During analysis, diff storage states between checkpoints to trace retry counts, failure layers, and outcome transitions instead of issuing new Playwright commands.
+Use Playwright's evaluation capabilities to read storage:
+
+> **New guardrail (2026-02-06):** The page context that runs on grok.com does **not** expose the extension `chrome.storage` APIs. Always probe for `window.chrome?.storage` before calling into it. If the API is unavailable, capture `{ available: false }` in the snapshot and note it in `metadata.json` instead of throwing. This prevents the `TypeError: Cannot read properties of undefined (reading 'local')` crash we hit previously.
+
+```javascript
+// Check chrome.storage.local (guard for page-context access)
+const chromeLocalStorage = await page.evaluate(() => {
+  const chromeApi = (window).chrome as (typeof chrome | undefined);
+  if (!chromeApi || !chromeApi.storage || !chromeApi.storage.local) {
+    return { available: false };
+  }
+  return new Promise((resolve) => {
+    chromeApi.storage.local.get(null, (items) => resolve({ available: true, items }));
+  });
+});
+
+// Check chrome.storage.sync (same guard)
+const chromeSyncStorage = await page.evaluate(() => {
+  const chromeApi = (window).chrome as (typeof chrome | undefined);
+  if (!chromeApi || !chromeApi.storage || !chromeApi.storage.sync) {
+    return { available: false };
+  }
+  return new Promise((resolve) => {
+    chromeApi.storage.sync.get(null, (items) => resolve({ available: true, items }));
+  });
+});
+
+// Check sessionStorage (including Grok's useMediaStore)
+const sessionData = await page.evaluate(() => {
+  const data = {};
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
+    if (key) {
+      try {
+        data[key] = JSON.parse(sessionStorage.getItem(key) || '{}');
+      } catch {
+        data[key] = sessionStorage.getItem(key);
+      }
+    }
+  }
+  return data;
+});
+
+// Check specific Grok media store
+const grokMediaStore = await page.evaluate(() => {
+  const store = sessionStorage.getItem('useMediaStore');
+  return store ? JSON.parse(store) : null;
+});
+
+// Check specific session data by mediaId
+const sessionState = await page.evaluate((mediaId) => {
+  const store = sessionStorage.getItem('useGrokRetryVideoSessions_store');
+  if (!store) return null;
+  const parsed = JSON.parse(store);
+  return {
+    session: parsed.state?.sessionByMediaId?.[mediaId],
+    persistent: parsed.state?.persistentByMediaId?.[mediaId],
+    activeMediaId: parsed.state?.activeSessionMediaId
+  };
+}, 'abc123_parent_image_id');
+```
 
 ### What to Verify in Storage
 
