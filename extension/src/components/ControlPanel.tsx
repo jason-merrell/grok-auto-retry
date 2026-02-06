@@ -556,7 +556,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 				<VideoGoalControls
 					videoGoal={videoGoal}
 					videosGenerated={videosGenerated}
-					isSessionActive={isSessionActive}
 					onVideoGoalChange={onVideoGoalChange}
 					disabled={!autoRetryEnabled}
 				/>

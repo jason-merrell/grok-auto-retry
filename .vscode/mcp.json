@@ -1,30 +1,32 @@
 {
-	"servers": {
-		"@upstash/context7-mcp": {
-			"command": "npx",
-			"args": [
-				"@upstash/context7-mcp@1.0.31"
-			],
-			"env": {
-				"CONTEXT7_API_KEY": "${input:CONTEXT7_API_KEY}"
-			},
-			"type": "stdio"
-		},
-		"@playwright/mcp": {
-			"command": "npx",
-			"args": [
-				"@playwright/mcp@latest"
-			],
-			"env": {},
-			"type": "stdio"
-		}
-	},
-	"inputs": [
-		{
-			"type": "promptString",
-			"id": "CONTEXT7_API_KEY",
-			"description": "API key for authentication",
-			"password": true
-		}
-	]
+    "servers": {
+        "@upstash/context7-mcp": {
+            "command": "npx",
+            "args": ["@upstash/context7-mcp@1.0.31"],
+            "env": {
+                "CONTEXT7_API_KEY": "${input:CONTEXT7_API_KEY}"
+            },
+            "type": "stdio"
+        },
+        "@playwright/mcp": {
+            "command": "npx",
+            "args": ["@playwright/mcp@latest"],
+            "env": {},
+            "type": "stdio"
+        },
+        "shadcn-ui-mcp-server": {
+            "command": "npx",
+            "args": ["-y", "shadcn-ui-mcp-server"],
+            "env": {},
+            "type": "stdio"
+        }
+    },
+    "inputs": [
+        {
+            "type": "promptString",
+            "id": "CONTEXT7_API_KEY",
+            "description": "API key for authentication",
+            "password": true
+        }
+    ]
 }

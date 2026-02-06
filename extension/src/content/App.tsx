@@ -12,6 +12,7 @@ import { useGrokRetrySettings } from "@/hooks/useGrokRetrySettings";
 import useGrokRetryPromptHistory from "@/hooks/useGrokRetryPromptHistory";
 import { useGrokRetryMuteController } from "@/hooks/useGrokRetryMuteController";
 import { useGrokRetrySessionController } from "@/hooks/useGrokRetrySessionController";
+import { useGrokRetryVideoSessions } from "@/hooks/useGrokRetryVideoSessions";
 import { useGrokRetryResumeGuard } from "@/hooks/useGrokRetryResumeGuard";
 import {
 	clearPendingInlinePrompt,
@@ -33,7 +34,8 @@ const ImaginePostApp: React.FC = () => {
 	const { settings: globalSettings, isLoading: globalSettingsLoading } = useGrokRetrySettings();
 	const generationDelayMs = globalSettings?.videoGenerationDelay ?? 8000;
 	const muteControl = useGrokRetryMuteController(isImaginePostRoute);
-	const retry = useGrokRetry({ postId, mediaId });
+	const store = useGrokRetryVideoSessions(postId, mediaId);
+	const retry = useGrokRetry({ postId, mediaId, store });
 	const {
 		autoRetryEnabled,
 		retryCount,
@@ -66,6 +68,7 @@ const ImaginePostApp: React.FC = () => {
 		pendingRetryPrompt,
 		pendingRetryOverride,
 		updateSession,
+		addLogEntry,
 	} = retry;
 
 	// Wire up test bridge for endSession so grace period auto-cancel works
@@ -132,6 +135,7 @@ const ImaginePostApp: React.FC = () => {
 			lastPromptValue,
 			lastAttemptTime,
 			pendingRetryAt,
+			addLogEntry,
 		});
 
 	useEffect(() => {

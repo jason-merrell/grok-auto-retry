@@ -90,12 +90,14 @@ const parseProgress = (text?: string | null): number | null => {
  * console.log(`Videos: ${retry.videosGenerated}/${retry.videoGoal}`);
  * ```
  */
-export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
-    const store = useGrokRetryVideoSessions(postId);
-    const { data: postData, isLoading, updateSession, updatePersistent, updateAll, clearSession, forceReload } = store;
+export const useGrokRetry = ({
+    postId,
+    store,
+}: PostRouteIdentity & { store: ReturnType<typeof useGrokRetryVideoSessions> }) => {
+    const { data: postData, isLoading, updateSession, updatePersistent, forceReload, addLogEntry } = store;
 
     const [lastClickTime, setLastClickTime] = useState(0);
-    const [originalPageTitle, setOriginalPageTitle] = useState('');
+    const [originalPageTitle, setOriginalPageTitle] = useState("");
     const cooldownTimeoutRef = useRef<number | null>(null);
     const progressObserverRef = useRef<MutationObserver | null>(null);
     const lastObservedProgressRef = useRef<number | null>(null);
@@ -111,7 +113,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
     const maxRetries = postData?.maxRetries ?? 3;
     const retryCount = postData?.retryCount ?? 0;
     const autoRetryEnabled = postData?.autoRetryEnabled ?? true;
-    const lastPromptValue = postData?.lastPromptValue ?? '';
+    const lastPromptValue = postData?.lastPromptValue ?? "";
     const isSessionActive = postData?.isActive ?? false;
     const videoGoal = postData?.videoGoal ?? 1;
     const videosGenerated = postData?.videosGenerated ?? 0;
@@ -121,7 +123,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
     const layer1Failures = postData?.layer1Failures ?? 0;
     const layer2Failures = postData?.layer2Failures ?? 0;
     const layer3Failures = postData?.layer3Failures ?? 0;
-    const lastSessionOutcome = postData?.outcome ?? 'idle';
+    const lastSessionOutcome = postData?.outcome ?? "idle";
     const lastSessionSummary = postData?.lastSessionSummary ?? null;
     const logs = postData?.logs ?? [];
     const pendingRetryAt = postData?.pendingRetryAt ?? null;
@@ -138,84 +140,59 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         };
     } catch { }
 
-    const setMaxRetries = useCallback((value: number) => {
-        const clamped = Math.max(1, Math.min(50, value));
-        updatePersistent({ maxRetries: clamped });
-    }, [updatePersistent]);
+    const setMaxRetries = useCallback(
+        (value: number) => {
+            const clamped = Math.max(1, Math.min(50, value));
+            updatePersistent({ maxRetries: clamped });
+        },
+        [updatePersistent]
+    );
 
-    const setAutoRetryEnabled = useCallback((value: boolean) => {
-        updatePersistent({ autoRetryEnabled: value });
-    }, [updatePersistent]);
+    const setAutoRetryEnabled = useCallback(
+        (value: boolean) => {
+            updatePersistent({ autoRetryEnabled: value });
+        },
+        [updatePersistent]
+    );
 
-    const updatePromptValue = useCallback((value: string) => {
-        updatePersistent({ lastPromptValue: value });
-    }, [updatePersistent]);
+    const updatePromptValue = useCallback(
+        (value: string) => {
+            updatePersistent({ lastPromptValue: value });
+        },
+        [updatePersistent]
+    );
 
     const resetRetries = useCallback(() => {
         updateSession({ retryCount: 0 });
     }, [updateSession]);
 
-    const setVideoGoal = useCallback((value: number) => {
-        const clamped = Math.max(1, Math.min(50, value));
-        updatePersistent({ videoGoal: clamped });
-    }, [updatePersistent]);
+    const setVideoGoal = useCallback(
+        (value: number) => {
+            const clamped = Math.max(1, Math.min(50, value));
+            updatePersistent({ videoGoal: clamped });
+        },
+        [updatePersistent]
+    );
 
     const clearLogs = useCallback(() => {
         updateSession({ logs: [] });
     }, [updateSession]);
 
-    const appendLog = useCallback((line: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
-        if (!postData) return;
+    const recordProgressSnapshot = useCallback(
+        (percent: number) => {
+            if (!postData) return;
 
-        const timestamp = new Date().toLocaleTimeString();
-        const formatted = `${timestamp} — ${level.toUpperCase()} — ${line}`;
-        const updatedLogs = [...(postData.logs || []), formatted].slice(-200);
+            const attempt = postData.currentAttemptNumber || 1;
+            const recordedAt = Date.now();
+            const newEntry = { attempt, percent, recordedAt };
 
-        updateSession({ logs: updatedLogs });
+            const updated = [...(postData.attemptProgress || []), newEntry].slice(-MAX_PROGRESS_RECORDS);
+            updateSession({ attemptProgress: updated });
 
-        // Notify listeners
-        window.dispatchEvent(new CustomEvent('grok:log', {
-            detail: { key: postId, postId, line, level }
-        }));
-    }, [postData, updateSession, postId]);
-
-    const appendLogRef = useRef(appendLog);
-
-    useEffect(() => {
-        appendLogRef.current = appendLog;
-    }, [appendLog]);
-
-    useEffect(() => {
-        const bridge = (line: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') => {
-            appendLogRef.current?.(line, level);
-        };
-
-        (window as any).__grok_append_log = bridge;
-
-        return () => {
-            try {
-                delete (window as any).__grok_append_log;
-            } catch { }
-        };
-    }, []);
-
-    const resetProgressTracking = useCallback(() => {
-        updateSession({ attemptProgress: [] });
-        lastObservedProgressRef.current = null;
-    }, [updateSession]);
-
-    const recordProgressSnapshot = useCallback((percent: number) => {
-        if (!postData) return;
-
-        const attempt = retryCount + 1;
-        const recordedAt = Date.now();
-        const newEntry = { attempt, percent, recordedAt };
-
-        const updated = [...(postData.attemptProgress || []), newEntry].slice(-MAX_PROGRESS_RECORDS);
-        updateSession({ attemptProgress: updated });
-
-        lastObservedProgressRef.current = percent;
-    }, [postData, retryCount, updateSession]);
+            lastObservedProgressRef.current = percent;
+        },
+        [postData, retryCount, updateSession]
+    );
 
     const stopProgressObserver = useCallback(() => {
         if (progressObserverRef.current) {
@@ -231,12 +208,12 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
 
         const button = document.querySelector(PROGRESS_BUTTON_SELECTOR) as HTMLElement;
         if (!button) {
-            console.log('[Grok Retry] Progress button not found, will try again later');
+            console.log("[Grok Retry] Progress button not found, will try again later");
             return;
         }
 
         const observer = new MutationObserver(() => {
-            const progressText = button.textContent ?? '';
+            const progressText = button.textContent ?? "";
             const percent = parseProgress(progressText);
 
             if (percent !== null && percent !== lastObservedProgressRef.current) {
@@ -245,7 +222,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             } else if (percent === null && lastObservedProgressRef.current !== null) {
                 const previousPercent = lastObservedProgressRef.current;
                 const trimmed = progressText.trim();
-                console.log('[Grok Retry] Progress indicator exited percent state', {
+                console.log("[Grok Retry] Progress indicator exited percent state", {
                     previousPercent,
                     text: trimmed,
                 });
@@ -262,7 +239,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
                         previousPercent,
                     });
                 } catch (error) {
-                    console.warn('[Grok Retry] Progress terminal handler error:', error);
+                    console.warn("[Grok Retry] Progress terminal handler error:", error);
                 }
             }
         });
@@ -270,11 +247,11 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         observer.observe(button, {
             childList: true,
             subtree: true,
-            characterData: true
+            characterData: true,
         });
 
         progressObserverRef.current = observer;
-        console.log('[Grok Retry] Progress observer started');
+        console.log("[Grok Retry] Progress observer started");
     }, [stopProgressObserver, recordProgressSnapshot]);
 
     const setProgressTerminalHandler = useCallback((handler: ProgressTerminalHandler | null) => {
@@ -290,8 +267,9 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         const lastPercent = recentAttempt?.percent ?? null;
         const layer = describeModerationLayer(lastPercent);
 
-        console.log('[Grok Retry] Failure detected:', { lastPercent, layer });
-        appendLog(`Moderation detected at ${lastPercent ?? 'unknown'}% (${layer.label})`, 'error');
+        console.log("[Grok Retry] Failure detected:", { lastPercent, layer });
+        addLogEntry(`Moderation failure detected at ${lastPercent ?? "unknown"}% progress.`, "error");
+        addLogEntry(`> ${layer.label}: ${layer.explanation}`, "error");
 
         const updates: any = {
             lastFailureTime: now,
@@ -307,13 +285,24 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         stopProgressObserver();
 
         return layer.layer ?? null;
-    }, [postData, retryCount, maxRetries, creditsUsed, layer1Failures, layer2Failures, layer3Failures, updateSession, stopProgressObserver, appendLog]);
+    }, [
+        postData,
+        retryCount,
+        maxRetries,
+        creditsUsed,
+        layer1Failures,
+        layer2Failures,
+        layer3Failures,
+        updateSession,
+        stopProgressObserver,
+        addLogEntry,
+    ]);
 
     const incrementVideosGenerated = useCallback(() => {
         if (!postData) return;
 
         const newCount = videosGenerated + 1;
-        console.log('[Grok Retry] Video generated successfully:', { count: newCount, goal: videoGoal });
+        console.log("[Grok Retry] Video generated successfully:", { count: newCount, goal: videoGoal });
 
         updateSession({
             videosGenerated: newCount,
@@ -322,151 +311,172 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             pendingRetryPrompt: null,
         });
 
-        appendLog(`Video ${newCount}/${videoGoal} generated successfully`, 'success');
+        addLogEntry(`Video ${newCount}/${videoGoal} generated successfully`, "success");
         stopProgressObserver();
-    }, [postData, videosGenerated, videoGoal, creditsUsed, updateSession, appendLog, stopProgressObserver]);
+    }, [postData, videosGenerated, videoGoal, creditsUsed, updateSession, addLogEntry, stopProgressObserver]);
 
-    const clickMakeVideoButton = useCallback((promptValue?: string, options?: { overridePermit?: boolean; context?: string }) => {
-        const now = Date.now();
-        const timeUntilReady = lastClickTime + CLICK_COOLDOWN_MS - now;
-        const logContext = options?.context ? ` [${options.context}]` : '';
+    const clickMakeVideoButton = useCallback(
+        (promptValue?: string, options?: { overridePermit?: boolean; context?: string }) => {
+            const now = Date.now();
+            const timeUntilReady = lastClickTime + CLICK_COOLDOWN_MS - now;
+            const logContext = options?.context ? ` [${options.context}]` : "";
 
-        if (timeUntilReady > 0) {
-            const seconds = Math.ceil(timeUntilReady / 1000);
-            console.log(`[Grok Retry] Cooldown active${logContext}, retrying in ${seconds}s...`);
-            appendLog(`Cooldown active — next attempt in ${seconds}s`, 'info');
+            if (timeUntilReady > 0) {
+                const seconds = Math.ceil(timeUntilReady / 1000);
+                console.log(`[Grok Retry] Cooldown active${logContext}, retrying in ${seconds}s...`);
+                addLogEntry(`Cooldown active — next attempt in ${seconds}s`, "info");
 
-            // Schedule the click after cooldown
-            if (cooldownTimeoutRef.current) {
-                clearTimeout(cooldownTimeoutRef.current);
-                cooldownTimeoutRef.current = null;
+                // Schedule the click after cooldown
+                if (cooldownTimeoutRef.current) {
+                    clearTimeout(cooldownTimeoutRef.current);
+                    cooldownTimeoutRef.current = null;
+                }
+                cooldownTimeoutRef.current = window.setTimeout(() => {
+                    cooldownTimeoutRef.current = null;
+                    clickMakeVideoButton(promptValue, { overridePermit: true });
+                }, timeUntilReady);
+                return false;
             }
-            cooldownTimeoutRef.current = window.setTimeout(() => {
-                cooldownTimeoutRef.current = null;
-                clickMakeVideoButton(promptValue, { overridePermit: true });
-            }, timeUntilReady);
-            return false;
-        }
 
-        // Guard: only click after a failure notification explicitly enables retry
-        if (!postData?.canRetry && !options?.overridePermit) {
-            console.warn(`[Grok Retry] Guard prevented click${logContext} — canRetry false`);
-            appendLog('Guard — waiting for failure notification before retrying');
-            return false;
-        }
-
-        const selectors = getGenerateButtonSelectors();
-        let button: HTMLButtonElement | null = null;
-
-        for (const selector of selectors) {
-            const candidate = document.querySelector<HTMLButtonElement>(selector);
-            if (candidate) {
-                button = candidate;
-                console.log('[Grok Retry] Found button with selector:', selector);
-                break;
+            // Guard: only click after a failure notification explicitly enables retry
+            if (!postData?.canRetry && !options?.overridePermit) {
+                console.warn(`[Grok Retry] Guard prevented click${logContext} — canRetry false`);
+                addLogEntry("Guard — waiting for failure notification before retrying");
+                return false;
             }
-        }
 
-        if (!button) {
-            console.error(`[Grok Retry] Make video button not found${logContext}. Tried selectors: ${selectors.join(', ')}`);
-            appendLog('Button not found - cannot retry', 'error');
-            return false;
-        }
+            const selectors = getGenerateButtonSelectors();
+            let button: HTMLButtonElement | null = null;
 
-        const promptEntry = findPromptInput();
-        if (!promptEntry) {
-            console.warn(`[Grok Retry] Prompt input not found${logContext}`);
-            appendLog('Prompt input not found', 'warn');
-            return false;
-        }
-
-        const valueToSet = promptValue || lastPromptValue;
-        if (valueToSet) {
-            console.log('[Grok Retry] Restoring prompt to input:', valueToSet.substring(0, 50) + '...');
-            const restored = writePromptValue(promptEntry.element, valueToSet);
-            if (!restored) {
-                console.warn('[Grok Retry] Failed to restore prompt');
+            for (const selector of selectors) {
+                const candidate = document.querySelector<HTMLButtonElement>(selector);
+                if (candidate) {
+                    button = candidate;
+                    console.log("[Grok Retry] Found button with selector:", selector);
+                    break;
+                }
             }
-        }
 
-        console.log(`[Grok Retry] Clicking button${logContext}`);
-        button.click();
-        appendLog('Clicked "Make video" button', 'info');
+            if (!button) {
+                console.error(`[Grok Retry] Make video button not found${logContext}. Tried selectors: ${selectors.join(", ")}`);
+                addLogEntry("Button not found - cannot retry", "error");
+                return false;
+            }
 
-        setLastClickTime(now);
-        updateSession({
-            lastAttemptTime: now,
-            pendingRetryAt: null,
-            pendingRetryPrompt: null,
-            pendingRetryOverride: false,
-        });
+            const promptEntry = findPromptInput();
+            if (!promptEntry) {
+                console.warn(`[Grok Retry] Prompt input not found${logContext}`);
+                addLogEntry("Prompt input not found", "warn");
+                return false;
+            }
 
-        return true;
-    }, [postData, lastClickTime, lastPromptValue, updateSession, appendLog]);
+            const valueToSet = promptValue || lastPromptValue;
+            if (valueToSet) {
+                console.log("[Grok Retry] Restoring prompt to input:", valueToSet.substring(0, 50) + "...");
+                const restored = writePromptValue(promptEntry.element, valueToSet);
+                if (!restored) {
+                    console.warn("[Grok Retry] Failed to restore prompt");
+                }
+            }
 
-    const startSession = useCallback((prompt: string) => {
-        console.log('[Grok Retry] Starting session with prompt:', prompt);
+            console.log(`[Grok Retry] Clicking button${logContext}`);
+            button.click();
+            addLogEntry('Clicked "Make video" button', "info");
 
-        clearSession();
-        resetProgressTracking();
+            setLastClickTime(now);
+            updateSession({
+                lastAttemptTime: now,
+                pendingRetryAt: null,
+                pendingRetryPrompt: null,
+                pendingRetryOverride: false,
+            });
 
-        updateAll(
-            {
+            return true;
+        },
+        [postData, lastClickTime, lastPromptValue, updateSession, addLogEntry]
+    );
+
+    const startSession = useCallback(
+        (prompt: string) => {
+            console.log("[Grok Retry] Starting session with prompt:", prompt);
+
+            updateSession({
                 isActive: true,
                 retryCount: 0,
                 videosGenerated: 0,
+                currentAttemptNumber: 1,
                 canRetry: true,
-                outcome: 'pending',
+                outcome: "pending",
                 currentPostId: postId,
                 processedAttemptIds: postId ? [postId] : [],
                 pendingRetryAt: null,
                 pendingRetryPrompt: null,
                 pendingRetryOverride: false,
-            },
-            {
+                logs: [],
+                attemptProgress: [],
+                lastSessionSummary: null,
+            });
+
+            updatePersistent({
                 lastPromptValue: prompt,
+            });
+
+            addLogEntry(`Session started with prompt: ${prompt}`, "info");
+
+            // Clear and immediately click
+            const clicked = clickMakeVideoButton(prompt, { overridePermit: true });
+            if (clicked) {
+                // Start observing progress after a short delay
+                setTimeout(() => startProgressObserver(), 1000);
             }
-        );
+        },
+        [updateSession, updatePersistent, postId, addLogEntry, clickMakeVideoButton, startProgressObserver]
+    );
 
-        appendLog(`Session started with prompt: ${prompt}`, 'info');
+    const endSession = useCallback(
+        (outcome: SessionOutcome, skipSummary: boolean = false) => {
+            console.log("[Grok Retry] Ending session with outcome:", outcome);
 
-        // Clear and immediately click
-        const clicked = clickMakeVideoButton(prompt, { overridePermit: true });
-        if (clicked) {
-            // Start observing progress after a short delay
-            setTimeout(() => startProgressObserver(), 1000);
-        }
-    }, [clearSession, resetProgressTracking, updateAll, mediaId, postId, appendLog, clickMakeVideoButton, startProgressObserver]);
+            stopProgressObserver();
 
-    const endSession = useCallback((outcome: SessionOutcome, skipSummary: boolean = false) => {
-        console.log('[Grok Retry] Ending session with outcome:', outcome);
+            const summary: SessionSummary = {
+                outcome,
+                completedVideos: videosGenerated,
+                videoGoal,
+                retriesAttempted: retryCount,
+                maxRetries,
+                creditsUsed,
+                layer1Failures,
+                layer2Failures,
+                layer3Failures,
+                endedAt: Date.now(),
+            };
 
-        stopProgressObserver();
+            updateSession({
+                isActive: false,
+                outcome,
+                lastSessionSummary: skipSummary ? null : summary,
+                pendingRetryAt: null,
+                pendingRetryPrompt: null,
+                pendingRetryOverride: false,
+            });
 
-        const summary: SessionSummary = {
-            outcome,
-            completedVideos: videosGenerated,
+            addLogEntry(`Session ended: ${outcome}`, outcome === "success" ? "success" : "error");
+        },
+        [
+            stopProgressObserver,
+            videosGenerated,
             videoGoal,
-            retriesAttempted: retryCount,
+            retryCount,
             maxRetries,
             creditsUsed,
             layer1Failures,
             layer2Failures,
             layer3Failures,
-            endedAt: Date.now(),
-        };
-
-        updateSession({
-            isActive: false,
-            outcome,
-            lastSessionSummary: skipSummary ? null : summary,
-            pendingRetryAt: null,
-            pendingRetryPrompt: null,
-            pendingRetryOverride: false,
-        });
-
-        appendLog(`Session ended: ${outcome}`, outcome === 'success' ? 'success' : 'error');
-    }, [stopProgressObserver, videosGenerated, videoGoal, retryCount, maxRetries, creditsUsed, layer1Failures, layer2Failures, layer3Failures, updateSession, appendLog]);
+            updateSession,
+            addLogEntry,
+        ]
+    );
 
     return {
         // State
@@ -488,27 +498,25 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         originalPageTitle,
         isLoading,
         logs,
-
-        // Actions
+        pendingRetryAt,
+        pendingRetryPrompt,
+        pendingRetryOverride,
+        // Methods
         setMaxRetries,
         setAutoRetryEnabled,
         updatePromptValue,
         resetRetries,
         setVideoGoal,
-        clearLogs,
-        appendLog,
-        markFailureDetected,
-        incrementVideosGenerated,
-        clickMakeVideoButton,
         startSession,
         endSession,
+        clickMakeVideoButton,
         startProgressObserver,
-        stopProgressObserver,
+        markFailureDetected,
+        incrementVideosGenerated,
+        clearLogs,
         forceReload,
-        pendingRetryAt,
-        pendingRetryPrompt,
-        pendingRetryOverride,
         updateSession,
         setProgressTerminalHandler,
+        addLogEntry,
     };
 };

@@ -19,6 +19,7 @@ const MODERATION_HOLD_MS = 2000; // keep detected state for stability
 interface ModerationDetectorOptions {
     onModerationDetected: () => void;
     onRateLimitDetected?: () => void;
+    addLogEntry: (message: string, level?: 'info' | 'warn' | 'error' | 'success') => void;
     enabled: boolean;
 }
 
@@ -48,6 +49,7 @@ const findModerationMatch = (value: string | null | undefined): string | null =>
  * 
  * @param options.onModerationDetected - Callback fired when moderation is detected
  * @param options.onRateLimitDetected - Optional callback for rate limits
+ * @param options.addLogEntry - Function to add log entries
  * @param options.enabled - Whether detection is active
  * @returns State object with moderationDetected and rateLimitDetected booleans
  * 
@@ -56,6 +58,7 @@ const findModerationMatch = (value: string | null | undefined): string | null =>
  * useGrokRetryModerationDetector({
  *   onModerationDetected: () => markFailure(),
  *   onRateLimitDetected: () => pauseRetries(),
+ *   addLogEntry: (message, level) => console.log(message, level),
  *   enabled: isSessionActive
  * });
  * ```
@@ -63,6 +66,7 @@ const findModerationMatch = (value: string | null | undefined): string | null =>
 export const useGrokRetryModerationDetector = ({
     onModerationDetected,
     onRateLimitDetected,
+    addLogEntry,
     enabled,
 }: ModerationDetectorOptions) => {
     const [moderationDetected, setModerationDetected] = useState(false);
@@ -77,18 +81,39 @@ export const useGrokRetryModerationDetector = ({
         let moderationFingerprint: string | null = null;
         let moderationSource: string | null = null;
 
-        const main = document.querySelector(selectors.containers.main) ?? document.body;
-        const scopedText = main?.textContent ?? '';
-
-        const scopedMatch = findModerationMatch(scopedText);
-        if (scopedMatch) {
-            moderationFingerprint = `text:${scopedMatch}`;
-            moderationSource = 'text';
-            isModerationDetected = true;
+        // Check notification section first (toasts appear here)
+        const notificationSection = document.querySelector(selectors.notifications.section);
+        if (notificationSection) {
+            const toastText = notificationSection.textContent ?? '';
+            const toastMatch = findModerationMatch(toastText);
+            if (toastMatch) {
+                moderationFingerprint = `toast:${toastMatch}`;
+                moderationSource = 'toast';
+                isModerationDetected = true;
+            }
+        } else {
+            // Debug: Log when notification section is not found
+            const fallbackCheck = document.querySelector('section[aria-label*="Notifications"]');
+            if (fallbackCheck) {
+                console.log('[Grok Retry] Found notification section but aria-live check failed');
+            }
         }
 
-        if (!isRateLimitDetected && scopedText.includes(RATE_LIMIT_TEXT)) {
-            isRateLimitDetected = true;
+        // Fallback to main content if not found in toast
+        if (!isModerationDetected) {
+            const main = document.querySelector(selectors.containers.main) ?? document.body;
+            const scopedText = main?.textContent ?? '';
+
+            const scopedMatch = findModerationMatch(scopedText);
+            if (scopedMatch) {
+                moderationFingerprint = `text:${scopedMatch}`;
+                moderationSource = 'text';
+                isModerationDetected = true;
+            }
+
+            if (!isRateLimitDetected && scopedText.includes(RATE_LIMIT_TEXT)) {
+                isRateLimitDetected = true;
+            }
         }
 
         if (isModerationDetected && !moderationDetected) {
@@ -112,7 +137,7 @@ export const useGrokRetryModerationDetector = ({
                 setModerationDetected(true);
                 const label = moderationSource ? ` via ${moderationSource}` : '';
                 console.log(`[Grok Retry] Moderation detected${label}`);
-                try { (window as any).__grok_append_log?.(`Moderation detected${label}`, 'warn'); } catch { }
+                addLogEntry(`Moderation detected${label}`, 'warn');
                 onModerationDetected();
                 setDebounceTimeout(null);
             }, 100);
@@ -135,7 +160,7 @@ export const useGrokRetryModerationDetector = ({
 
             setRateLimitDetected(true);
             console.warn('[Grok Retry] Rate limit detected — cancelling active sessions');
-            try { (window as any).__grok_append_log?.('Rate limit detected — cancelling active sessions. Please wait before retrying.', 'warn'); } catch { }
+            addLogEntry('Rate limit detected — cancelling active sessions. Please wait before retrying.', 'warn');
             onRateLimitDetected?.();
         } else if (!isRateLimitDetected && rateLimitDetected) {
             setRateLimitDetected(false);
@@ -157,11 +182,21 @@ export const useGrokRetryModerationDetector = ({
         });
 
         const observedTargets = new Set<Element>();
+
+        // Watch notification section (where toasts appear)
+        const notificationEl = document.querySelector(selectors.notifications.section);
+        if (notificationEl) {
+            observedTargets.add(notificationEl);
+        }
+
+        // Watch main content area
         const mainEl = document.querySelector(selectors.containers.main);
         if (mainEl) {
             observedTargets.add(mainEl);
         }
-        if (document.body) {
+
+        // Fallback to body
+        if (observedTargets.size === 0 && document.body) {
             observedTargets.add(document.body);
         }
 

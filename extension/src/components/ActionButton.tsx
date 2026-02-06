@@ -23,21 +23,23 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ isSessionActive, onG
 
 	if (isSessionActive) {
 		return (
-			<Button
-				data-testid="stop-session-button"
-				variant="destructive"
-				size="sm"
-				type="button"
-				className="w-full justify-between px-3"
-				onClick={onCancel}
-				aria-keyshortcuts={stopShortcutAria}
-			>
-				<span className="flex items-center gap-2">
-					<X className="h-4 w-4" aria-hidden="true" />
-					<span>Stop Session</span>
-				</span>
-				<kbd className={shortcutClassName}>{stopShortcutLabel}</kbd>
-			</Button>
+			<div className="flex flex-col gap-1.5 w-full">
+				<Button
+					data-testid="stop-session-button"
+					variant="destructive"
+					size="sm"
+					type="button"
+					className="w-full justify-between px-3"
+					onClick={onCancel}
+					aria-keyshortcuts={stopShortcutAria}
+				>
+					<span className="flex items-center gap-2">
+						<X className="h-4 w-4" aria-hidden="true" />
+						<span>Stop Session</span>
+					</span>
+					<kbd className={shortcutClassName}>{stopShortcutLabel}</kbd>
+				</Button>
+			</div>
 		);
 	}
 

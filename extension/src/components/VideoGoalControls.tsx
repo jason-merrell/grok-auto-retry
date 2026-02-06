@@ -8,7 +8,6 @@ import { Plus, Minus } from "lucide-react";
 interface VideoGoalControlsProps {
 	videoGoal: number;
 	videosGenerated: number;
-	isSessionActive: boolean;
 	onVideoGoalChange: (value: number) => void;
 	disabled?: boolean;
 }
@@ -16,7 +15,6 @@ interface VideoGoalControlsProps {
 export const VideoGoalControls: React.FC<VideoGoalControlsProps> = ({
 	videoGoal,
 	videosGenerated,
-	isSessionActive,
 	onVideoGoalChange,
 	disabled = false,
 }) => {
@@ -63,49 +61,55 @@ export const VideoGoalControls: React.FC<VideoGoalControlsProps> = ({
 	return (
 		<div className="space-y-2">
 			<div className="flex items-center justify-between">
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Label className="text-sm cursor-help">Video Goal</Label>
-					</TooltipTrigger>
-					<TooltipContent>Number of videos to generate automatically with 8-second delays (1-50)</TooltipContent>
-				</Tooltip>
-				{isSessionActive && videosGenerated > 0 && (
-					<span className="text-xs text-muted-foreground">
-						{videosGenerated ?? 0}/{videoGoal ?? 1} generated
-					</span>
-				)}
-			</div>
-			<div className="flex items-center gap-2">
-				<Button
-					variant="outline"
-					size="icon"
-					className="h-8 w-8"
-					onClick={handleDecrement}
-					disabled={disabled || videoGoal <= 1}
-				>
-					<Minus className="h-3 w-3" />
-				</Button>
-				<Input
-					data-testid="video-goal-input"
-					type="number"
-					min="1"
-					max="50"
-					value={inputValue}
-					onChange={handleInputChange}
-					onKeyPress={handleKeyPress}
-					onBlur={handleBlur}
-					className="h-8 text-center"
-					disabled={disabled}
-				/>
-				<Button
-					variant="outline"
-					size="icon"
-					className="h-8 w-8"
-					onClick={handleIncrement}
-					disabled={disabled || videoGoal >= 50}
-				>
-					<Plus className="h-3 w-3" />
-				</Button>
+				<Label htmlFor="video-goal" className="flex items-center gap-2">
+					Video Goal
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<span className="text-xs text-muted-foreground cursor-help">
+								({videosGenerated} / {videoGoal})
+							</span>
+						</TooltipTrigger>
+						<TooltipContent>
+							<p>Current videos generated vs. goal for this session.</p>
+						</TooltipContent>
+					</Tooltip>
+				</Label>
+				<div className="flex items-center gap-1">
+					<Button
+						size="sm"
+						variant="ghost"
+						className="h-7 w-7 p-0"
+						onClick={handleDecrement}
+						disabled={disabled || videoGoal <= 1}
+						aria-label="Decrement video goal"
+					>
+						<Minus className="h-4 w-4" />
+					</Button>
+					<Input
+						id="video-goal"
+						data-testid="video-goal-input"
+						type="number"
+						min="1"
+						max="50"
+						value={inputValue}
+						onChange={handleInputChange}
+						onKeyPress={handleKeyPress}
+						onBlur={handleBlur}
+						className="h-7 w-16 text-center"
+						disabled={disabled}
+						aria-label="Video goal"
+					/>
+					<Button
+						size="sm"
+						variant="ghost"
+						className="h-7 w-7 p-0"
+						onClick={handleIncrement}
+						disabled={disabled || videoGoal >= 50}
+						aria-label="Increment video goal"
+					>
+						<Plus className="h-4 w-4" />
+					</Button>
+				</div>
 			</div>
 		</div>
 	);

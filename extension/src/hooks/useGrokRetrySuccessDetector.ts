@@ -38,12 +38,14 @@ import type { GrokVideo } from './useGrokRetryGrokStorage';
 interface SuccessDetectorOptions {
     onStorageSuccess: (video: GrokVideo) => void;
     onUISuccessSignal?: () => void;
+    addLogEntry: (message: string, level?: 'info' | 'warn' | 'error' | 'success') => void;
     enabled: boolean;
 }
 
 export const useGrokRetrySuccessDetector = ({
     onStorageSuccess,
     onUISuccessSignal,
+    addLogEntry,
     enabled,
 }: SuccessDetectorOptions) => {
     const { postId, mediaId } = useGrokRetryPostId();
@@ -64,11 +66,7 @@ export const useGrokRetrySuccessDetector = ({
                 }
                 lastCompletedAttemptIdRef.current = videoId;
                 console.log(`[Grok Retry] Success detected via Grok storage for ${videoId}`);
-                try {
-                    (window as any).__grok_append_log?.('Success detected (Grok storage)', 'success');
-                } catch {
-                    // ignore log transport issues
-                }
+                addLogEntry(`Success detected (Grok storage for ${videoId})`, 'success');
                 onStorageSuccess(video);
             }
         },
@@ -114,11 +112,7 @@ export const useGrokRetrySuccessDetector = ({
                     }
                     lastCompletedAttemptIdRef.current = domAttemptKey;
                     console.log(`[Grok Retry] Success detected via DOM for ${currentPostId}`);
-                    try {
-                        (window as any).__grok_append_log?.('Success detected (DOM)', 'success');
-                    } catch {
-                        // ignore log transport issues
-                    }
+                    addLogEntry(`Success detected (DOM for ${currentPostId})`, 'success');
                     onUISuccessSignal?.();
                 }
             } catch (error) {
