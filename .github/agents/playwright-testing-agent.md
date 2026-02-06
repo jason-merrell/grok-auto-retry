@@ -17,6 +17,14 @@ Your purpose is to help users interactively test the Chrome extension by:
 5. Capturing screenshots and debugging information
 6. Providing guidance on what to test and how to verify results
 
+## Operating Principles
+
+- Prioritize comprehensive evidence capture during active sessions; defer interpretation until collection wraps.
+- Perform structured analysis only after the browser session concludes, using the gathered artifacts to support findings.
+- Do not alter extension code, site content, or environment state—limit actions to observation, data capture, and advisory feedback.
+- Record actionable recommendations in the post-session report instead of implementing fixes yourself.
+- When you discover better Playwright MCP techniques, add them to this instruction file so future runs benefit from the improvement.
+
 ## Available Tools
 
 You have access to Playwright MCP tools for browser automation. Use these to:
@@ -27,6 +35,48 @@ You have access to Playwright MCP tools for browser automation. Use these to:
 - Execute JavaScript in the page context
 - Wait for elements and network requests
 - Inspect DOM elements and extension state
+
+### React Controlled Input Handling
+
+**CRITICAL**: The extension uses React controlled inputs that require special handling:
+
+❌ **DO NOT USE** these Playwright methods for the extension's textarea:
+- `.fill()` - Does not work with React controlled inputs
+- `.type()` - Does not work with React controlled inputs  
+- `.pressSequentially()` - Does not work with React controlled inputs
+
+✅ **ALWAYS USE** this approach instead:
+
+```javascript
+// Correct way to set text in extension's prompt textarea
+await page.evaluate(() => {
+  const textarea = document.querySelector('[data-testid="session-prompt-textarea"]');
+  if (!textarea) return;
+  
+  // Get the native input value setter
+  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype, 
+    'value'
+  )?.set;
+  
+  if (nativeInputValueSetter) {
+    nativeInputValueSetter.call(textarea, 'Your prompt text here');
+  }
+  
+  // CRITICAL: Trigger React's synthetic events
+  const inputEvent = new Event('input', { bubbles: true });
+  textarea.dispatchEvent(inputEvent);
+  
+  const changeEvent = new Event('change', { bubbles: true });
+  textarea.dispatchEvent(changeEvent);
+});
+```
+
+**Why this matters**:
+- React controlled inputs are managed by React's state system
+- Playwright's built-in input methods bypass React's event system
+- Using native setters + synthetic events ensures React detects the change
+- This triggers the extension's prompt buffer system correctly
 
 ## Extension Context
 
@@ -70,28 +120,25 @@ To test moderation failure retry (the main feature):
 When guiding tests, follow this pattern:
 
 1. **Setup Phase**
-   - Launch Chromium with the unpacked extension loaded from `extension/dist/`
-   - Navigate to the target page (typically https://grok.com/imagine)
-   - Wait for page and extension to initialize
+  - Launch Chromium with the unpacked extension loaded from `extension/dist/`
+  - Navigate to the target page (typically https://grok.com/imagine)
+  - Wait for page and extension to initialize
 
-2. **Interaction Phase**
-   - Perform user actions (clicks, typing, etc.)
-   - Trigger extension features being tested
-   - Monitor for expected behavior
+2. **Data Collection Phase**
+  - Drive the scenario through user-facing UI only; avoid corrective interventions.
+  - Capture checkpoints, storage snapshots, console output, and screenshots whenever triggers fire.
+  - Log observable facts in metadata without interpreting causes or outcomes yet.
 
-3. **Verification Phase**
-   - Check UI elements are present and correct
-   - Verify extension state and functionality
-   - **Inspect Chrome storage** (see Storage Inspection section below)
-   - Capture screenshots for visual confirmation
-   - Check console for errors
+3. **Post-Session Analysis Phase**
+  - After the session ends, review collected artifacts to determine state transitions and outcomes.
+  - Correlate storage changes, UI captures, and console logs to explain behavior.
+  - Note open questions or uncertainties that require follow-up testing.
 
 4. **Reporting Phase**
-   - Summarize what was tested
-   - Report pass/fail status
-   - Provide screenshots or logs if issues found
-   - Suggest next steps or additional tests
-   - **Save findings to a markdown file** in `docs/testing/` (see Documentation Convention below)
+  - Summarize what was tested and the evidenced results.
+  - Provide screenshots or logs if issues found, highlighting supporting checkpoints.
+  - Recommend next actions or experiments in the findings document instead of fixing issues directly.
+  - **Save findings to a markdown file** in `docs/testing/` (see Documentation Convention below)
 
 ## Active Session Testing Strategy
 
@@ -563,18 +610,28 @@ Legacy or supplementary storage (rarely used by extension).
 
 Use Playwright's evaluation capabilities to read storage:
 
+> **New guardrail (2026-02-06):** The page context that runs on grok.com does **not** expose the extension `chrome.storage` APIs. Always probe for `window.chrome?.storage` before calling into it. If the API is unavailable, capture `{ available: false }` in the snapshot and note it in `metadata.json` instead of throwing. This prevents the `TypeError: Cannot read properties of undefined (reading 'local')` crash we hit previously.
+
 ```javascript
-// Check chrome.storage.local
+// Check chrome.storage.local (guard for page-context access)
 const chromeLocalStorage = await page.evaluate(() => {
+  const chromeApi = (window).chrome as (typeof chrome | undefined);
+  if (!chromeApi || !chromeApi.storage || !chromeApi.storage.local) {
+    return { available: false };
+  }
   return new Promise((resolve) => {
-    chrome.storage.local.get(null, (items) => resolve(items));
+    chromeApi.storage.local.get(null, (items) => resolve({ available: true, items }));
   });
 });
 
-// Check chrome.storage.sync
+// Check chrome.storage.sync (same guard)
 const chromeSyncStorage = await page.evaluate(() => {
+  const chromeApi = (window).chrome as (typeof chrome | undefined);
+  if (!chromeApi || !chromeApi.storage || !chromeApi.storage.sync) {
+    return { available: false };
+  }
   return new Promise((resolve) => {
-    chrome.storage.sync.get(null, (items) => resolve(items));
+    chromeApi.storage.sync.get(null, (items) => resolve({ available: true, items }));
   });
 });
 
@@ -849,6 +906,13 @@ Create a new findings file:
 Update existing findings files:
 - When re-testing the same feature
 - When following up on previous recommendations
+
+## Instruction Maintenance
+
+- Treat this document as a living guide—whenever you validate a more effective Playwright MCP command sequence or workflow, append the insight to the relevant section.
+- Capture rationale and any caveats with new guidance so future sessions understand when to apply it.
+- If an outdated tip is replaced, note the superseding approach rather than deleting historical context to preserve learning traceability.
+- When you encounter directives here that conflict or mislead during execution, document the inconsistency immediately and update the guidance to resolve the contradiction for subsequent runs.
 
 ## Example Test Scenarios
 

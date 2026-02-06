@@ -641,6 +641,23 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
             currentMediaIdRef.current = mediaId;
             console.log('[Grok Retry Store] Found mediaId for post:', { postId, mediaId });
 
+            // Flush any buffered prompt for this postId now that we have mediaId
+            const bufferedPrompt = store.promptBuffer?.[postId];
+            if (bufferedPrompt) {
+                console.log('[Grok Retry Store] Flushing buffered prompt to persistent storage:', {
+                    mediaId,
+                    postId,
+                    promptLength: bufferedPrompt.length
+                });
+
+                if (!store.persistentByMediaId[mediaId]) {
+                    store.persistentByMediaId[mediaId] = createDefaultPersistentData(globalSettings);
+                }
+                store.persistentByMediaId[mediaId].lastPromptValue = bufferedPrompt;
+                delete store.promptBuffer[postId];
+                // Store will be saved later in this function
+            }
+
             // Get or create session data for this mediaId
             let sessionData = store.sessionByMediaId[mediaId];
 
@@ -795,37 +812,6 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
             });
         });
     }, [postId, reloadSignal]);
-
-    // Effect to flush buffered prompt when mediaId becomes available
-    useEffect(() => {
-        const mediaId = currentMediaIdRef.current;
-        if (!mediaId || !postId) return;
-
-        const store = parseStore();
-        const bufferedPrompt = store.promptBuffer?.[postId];
-
-        if (bufferedPrompt) {
-            console.log('[Grok Retry Store] Flushing buffered prompt to persistent storage:', {
-                mediaId,
-                postId,
-                promptLength: bufferedPrompt.length
-            });
-
-            if (!store.persistentByMediaId[mediaId]) {
-                store.persistentByMediaId[mediaId] = createDefaultPersistentData();
-            }
-            store.persistentByMediaId[mediaId].lastPromptValue = bufferedPrompt;
-            delete store.promptBuffer[postId];
-            saveStore(store);
-            storeRef.current = store;
-
-            // Update local state
-            setData((prev) => {
-                if (!prev) return prev;
-                return { ...prev, lastPromptValue: bufferedPrompt };
-            });
-        }
-    }, [currentMediaIdRef.current, postId]);
 
     // Update session data (ephemeral)
     const updateSession = useCallback((updates: Partial<SessionData>) => {
