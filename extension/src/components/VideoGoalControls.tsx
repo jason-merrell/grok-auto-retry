@@ -86,6 +86,7 @@ export const VideoGoalControls: React.FC<VideoGoalControlsProps> = ({
 					<Minus className="h-3 w-3" />
 				</Button>
 				<Input
+					data-testid="video-goal-input"
 					type="number"
 					min="1"
 					max="50"

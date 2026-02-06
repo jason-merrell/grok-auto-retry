@@ -12,7 +12,10 @@
     "test:unit": "vitest run",
     "test:integration": "npm run build && playwright test tests/integration",
     "test:e2e": "npm run build && playwright test tests/e2e",
-    "e2e:headed": "PWDEBUG=console playwright test tests/e2e"
+    "test:e2e:reauth": "FORCE_LOGIN=true npm run test:e2e",
+    "test:eval": "npm run build && playwright test tests/eval",
+    "e2e:headed": "PWDEBUG=console playwright test tests/e2e",
+    "eval:headed": "npm run build && playwright test tests/eval --headed"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

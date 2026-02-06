@@ -153,6 +153,25 @@ export const useGrokRetryPostId = (): PostRouteIdentity => {
                 // 2. Sidebar-based: old post appears in video history sidebar
                 const isInSameSidebarGroup = isPostInSidebar(sessionPostId);
 
+                const suppressUntil = w.__grok_route_eval_suppress_until as number | undefined;
+                if (typeof suppressUntil === 'number') {
+                    if (evaluationNow < suppressUntil) {
+                        clearPendingRouteEval();
+                        const lastSuppressLog = (w as any).__grok_route_eval_suppress_log as number | undefined;
+                        if (!lastSuppressLog || evaluationNow - lastSuppressLog > 400) {
+                            console.log('[Grok Retry] Suppressing route grace window after moderation', {
+                                sessionPostId,
+                                urlPostId,
+                                suppressMsRemaining: suppressUntil - evaluationNow,
+                            });
+                            (w as any).__grok_route_eval_suppress_log = evaluationNow;
+                        }
+                    } else {
+                        delete (w as any).__grok_route_eval_suppress_until;
+                        delete (w as any).__grok_route_eval_suppress_log;
+                    }
+                }
+
                 const routeEvalSignature = `${sessionMediaId ?? 'none'}|${nextMediaId ?? 'none'}|${hasMatchingMediaId ? '1' : '0'}|${isRecentRouteChange ? '1' : '0'}|${isInSameSidebarGroup ? '1' : '0'}`;
                 const routeEvalCache = (w as any).__grok_last_route_eval as {
                     from: string;

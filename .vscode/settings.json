@@ -19,5 +19,15 @@
     ],
     "eslint.validate": ["typescriptreact", "typescript", "javascriptreact", "javascript"],
     "tailwindCSS.experimental.classRegex": [["ui:\\s*{([^)]*)\\s*}", "[\"'`]([^\"'`]*).*?[\"'`]"]],
-    "typescript.tsserver.experimental.enableProjectDiagnostics": false
+    "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+    "markdown.validate.enabled": false,
+    "markdownlint.config": {
+        "MD007": false,
+        "MD060": false,
+        "MD032": false,
+        "MD031": false
+    },
+    "[markdown]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
 }

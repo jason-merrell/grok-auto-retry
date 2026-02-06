@@ -15,7 +15,6 @@ const MODERATION_TEXT_MATCHERS = [
 const RATE_LIMIT_TEXT = "Rate limit reached";
 const MODERATION_TRIGGER_COOLDOWN_MS = 5000; // hard guard between callbacks
 const MODERATION_HOLD_MS = 2000; // keep detected state for stability
-const MODERATION_IMAGE_SELECTOR = 'img[alt*="moderated" i], img[alt*="content moderated" i]';
 
 interface ModerationDetectorOptions {
     onModerationDetected: () => void;
@@ -69,60 +68,23 @@ export const useGrokRetryModerationDetector = ({
     const [moderationDetected, setModerationDetected] = useState(false);
     const [rateLimitDetected, setRateLimitDetected] = useState(false);
     const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
-    const lastToastTextRef = useRef<string>('');
     const lastTriggerAtRef = useRef<number>(0);
     const lastModerationFingerprintRef = useRef<string>('');
 
     const checkForModeration = useCallback(() => {
-        const notificationsSection = document.querySelector(selectors.notifications.section);
         let isModerationDetected = false;
         let isRateLimitDetected = false;
         let moderationFingerprint: string | null = null;
         let moderationSource: string | null = null;
 
-        if (notificationsSection) {
-            const latestToast = notificationsSection.querySelector<HTMLLIElement>('li.toast[data-visible="true"]');
-            const textNode = latestToast?.querySelector<HTMLElement>('span, div');
-            const text = textNode?.textContent ?? '';
-
-            if (text && text !== lastToastTextRef.current) {
-                lastToastTextRef.current = text;
-            }
-
-            const toastMatch = findModerationMatch(text);
-            if (toastMatch) {
-                isModerationDetected = true;
-                moderationFingerprint = `toast:${toastMatch}:${normalizeText(text).slice(0, 80)}`;
-                moderationSource = 'toast';
-            }
-
-            if (text.includes(RATE_LIMIT_TEXT)) {
-                isRateLimitDetected = true;
-            }
-        }
-
-        if (!isModerationDetected) {
-            const moderatedImages = document.querySelectorAll(MODERATION_IMAGE_SELECTOR);
-            if (moderatedImages.length > 0) {
-                const parts = Array.from(moderatedImages)
-                    .map((img) => img.getAttribute('src') || img.getAttribute('alt') || img.getAttribute('data-testid') || '')
-                    .filter(Boolean);
-                moderationFingerprint = `image:${parts.join('|') || 'unknown'}`;
-                moderationSource = 'overlay';
-                isModerationDetected = true;
-            }
-        }
-
         const main = document.querySelector(selectors.containers.main) ?? document.body;
         const scopedText = main?.textContent ?? '';
 
-        if (!isModerationDetected) {
-            const scopedMatch = findModerationMatch(scopedText);
-            if (scopedMatch) {
-                moderationFingerprint = `text:${scopedMatch}`;
-                moderationSource = 'text';
-                isModerationDetected = true;
-            }
+        const scopedMatch = findModerationMatch(scopedText);
+        if (scopedMatch) {
+            moderationFingerprint = `text:${scopedMatch}`;
+            moderationSource = 'text';
+            isModerationDetected = true;
         }
 
         if (!isRateLimitDetected && scopedText.includes(RATE_LIMIT_TEXT)) {
@@ -188,21 +150,26 @@ export const useGrokRetryModerationDetector = ({
         // Initial check
         checkForModeration();
 
-        // Set up MutationObserver scoped to notifications section if present, else main container
-        const target = document.querySelector(selectors.notifications.section)
-            || document.querySelector(selectors.containers.main)
-            || document.body;
-
         const observer = new MutationObserver((mutations) => {
-            // Only react to child additions/removals to reduce noise
-            if (mutations.some(m => m.type === 'childList')) {
+            if (mutations.some((mutation) => mutation.type === 'childList')) {
                 checkForModeration();
             }
         });
 
-        observer.observe(target, {
-            childList: true,
-            subtree: true,
+        const observedTargets = new Set<Element>();
+        const mainEl = document.querySelector(selectors.containers.main);
+        if (mainEl) {
+            observedTargets.add(mainEl);
+        }
+        if (document.body) {
+            observedTargets.add(document.body);
+        }
+
+        observedTargets.forEach((node) => {
+            observer.observe(node, {
+                childList: true,
+                subtree: true,
+            });
         });
 
         return () => {

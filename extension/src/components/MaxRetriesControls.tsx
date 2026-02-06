@@ -117,6 +117,7 @@ export const MaxRetriesControls: React.FC<MaxRetriesControlsProps> = ({
 					<Minus className="h-3 w-3" />
 				</Button>
 				<Input
+					data-testid="max-retries-input"
 					type="number"
 					value={inputValue}
 					className="h-8 text-center"

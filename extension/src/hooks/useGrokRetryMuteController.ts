@@ -112,6 +112,16 @@ function findMuteButton(): HTMLButtonElement | null {
     return null;
 }
 
+/**
+ * Controls the mute state of Grok's preview video while keeping UI indicators accurate.
+ *
+ * Finds the active video element and associated mute button, synchronises their state,
+ * watches DOM mutations for new media, and exposes a toggle helper that respects the
+ * current enablement flag.
+ *
+ * @param enabled - Whether mute monitoring should run for the current route/view
+ * @returns Current mute availability/state plus a toggle function
+ */
 export function useGrokRetryMuteController(enabled: boolean) {
     const [state, setState] = useState<MuteState>({ isMuted: false, isAvailable: false });
     const buttonRef = useRef<HTMLButtonElement | null>(null);

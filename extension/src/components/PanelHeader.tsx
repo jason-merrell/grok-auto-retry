@@ -105,7 +105,13 @@ export const PanelHeader: React.FC<PanelHeaderProps> = ({
 				{onSettingsClick && (
 					<Tooltip>
 						<TooltipTrigger asChild>
-							<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onSettingsClick}>
+							<Button
+								data-testid="settings-button"
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7"
+								onClick={onSettingsClick}
+							>
 								<Settings className="h-4 w-4" />
 							</Button>
 						</TooltipTrigger>

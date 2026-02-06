@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { HookStore, createStore, extractState, isHookStore, ENABLE_MIGRATION_CLEANUP } from '@/types/storage';
 import { useGrokRetryGrokStorage } from './useGrokRetryGrokStorage';
+import { CLICK_COOLDOWN_MS, DEFAULT_MODERATION_RETRY_DELAY_MS } from '../lib/retryConstants';
 
 /**
  * Centralized storage hook using mediaId-based architecture (matches Grok's useMediaStore).
@@ -114,6 +115,7 @@ export interface SessionData {
     // Pending retry orchestration
     pendingRetryAt: number | null;
     pendingRetryPrompt: string | null;
+    pendingRetryOverride: boolean;
 }
 
 // Persistent preferences (survive page reloads)
@@ -131,6 +133,7 @@ interface StoreState {
     sessionByMediaId: Record<string, SessionData>;
     persistentByMediaId: Record<string, PersistentData>;
     activeSessionMediaId: string | null;  // Track the mediaId of the active session
+    promptBuffer: Record<string, string>;  // Buffer for prompt updates before mediaId is available (keyed by postId)
 }
 
 export type VideoSessionsStore = HookStore<StoreState>;
@@ -155,6 +158,7 @@ const createDefaultSessionData = (): SessionData => ({
     lastSessionSummary: null,
     pendingRetryAt: null,
     pendingRetryPrompt: null,
+    pendingRetryOverride: false,
 });
 
 const applySessionDefaults = (session?: Partial<SessionData>): SessionData => ({
@@ -287,6 +291,7 @@ const cleanStaleSessionData = (store: StoreState): StoreState => {
         sessionByMediaId: cleanedSessionByMediaId,
         persistentByMediaId: store.persistentByMediaId, // Keep persistent data unchanged
         activeSessionMediaId: store.activeSessionMediaId || null, // Preserve active session tracker
+        promptBuffer: store.promptBuffer || {}, // Preserve prompt buffer
     };
 };
 
@@ -303,14 +308,19 @@ const parseStore = (): StoreState => {
                 saveStore(migratedState);
                 return migratedState;
             }
-            return { sessionByMediaId: {}, persistentByMediaId: {}, activeSessionMediaId: null };
+            return { sessionByMediaId: {}, persistentByMediaId: {}, activeSessionMediaId: null, promptBuffer: {} };
         }
 
         const parsed = JSON.parse(raw);
 
         if (isHookStore<StoreState>(parsed)) {
             // Already in new format - extract and validate
-            let state = extractState(parsed, { sessionByMediaId: {}, persistentByMediaId: {}, activeSessionMediaId: null });
+            let state = extractState(parsed, { sessionByMediaId: {}, persistentByMediaId: {}, activeSessionMediaId: null, promptBuffer: {} });
+
+            // Ensure promptBuffer exists (for backward compatibility)
+            if (!state.promptBuffer) {
+                state.promptBuffer = {};
+            }
 
             // Validate and clean stale session data
             state = cleanStaleSessionData(state);
@@ -329,7 +339,7 @@ const parseStore = (): StoreState => {
         }
     } catch (error) {
         console.error('[Grok Retry Store] Parse error:', error);
-        return { sessionByMediaId: {}, persistentByMediaId: {}, activeSessionMediaId: null };
+        return { sessionByMediaId: {}, persistentByMediaId: {}, activeSessionMediaId: null, promptBuffer: {} };
     }
 };
 
@@ -479,7 +489,7 @@ const migrateFromV0 = (): StoreState | null => {
             persistent: Object.keys(persistentByMediaId).length
         });
 
-        return { sessionByMediaId, persistentByMediaId, activeSessionMediaId: null };
+        return { sessionByMediaId, persistentByMediaId, activeSessionMediaId: null, promptBuffer: {} };
     } catch (error) {
         console.error('[useGrokRetryVideoSessions] Migration error:', error);
         return null;
@@ -507,7 +517,7 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
     const [reloadSignal, setReloadSignal] = useState(0);
     const lastLoadedPostIdRef = useRef<string | null>(null);
     const currentMediaIdRef = useRef<string | null>(null);
-    const storeRef = useRef<StoreState>({ sessionByMediaId: {}, persistentByMediaId: {}, activeSessionMediaId: null });
+    const storeRef = useRef<StoreState>({ sessionByMediaId: {}, persistentByMediaId: {}, activeSessionMediaId: null, promptBuffer: {} });
     const forceReloadRef = useRef<() => void>(() => { });
 
     // Force reload function - exposed via ref for external triggers
@@ -689,11 +699,36 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
                         sessionData.lastFailureTime = Date.now();
                         sessionData.logs.push(`[${new Date().toISOString()}] Moderation detected on attempt ${attemptId}`);
                         console.log('[Grok Retry Store] Moderation detected, retry count:', sessionData.retryCount);
+
+                        const shouldScheduleRetry =
+                            persistentData.autoRetryEnabled && sessionData.retryCount < persistentData.maxRetries;
+                        if (shouldScheduleRetry) {
+                            const now = Date.now();
+                            const cooldownRemaining = sessionData.lastAttemptTime
+                                ? Math.max(0, sessionData.lastAttemptTime + CLICK_COOLDOWN_MS - now)
+                                : 0;
+                            const retryDelay = Math.max(cooldownRemaining, DEFAULT_MODERATION_RETRY_DELAY_MS);
+                            sessionData.pendingRetryAt = now + retryDelay;
+                            sessionData.pendingRetryPrompt = persistentData.lastPromptValue || null;
+                            sessionData.pendingRetryOverride = true;
+                            console.log('[Grok Retry Store] Scheduled moderation retry', {
+                                retryDelay,
+                                retryCount: sessionData.retryCount,
+                                maxRetries: persistentData.maxRetries,
+                            });
+                        } else {
+                            sessionData.pendingRetryAt = null;
+                            sessionData.pendingRetryPrompt = null;
+                            sessionData.pendingRetryOverride = false;
+                        }
                     } else {
                         // Non-moderated video - increment videosGenerated
                         sessionData.videosGenerated++;
                         sessionData.logs.push(`[${new Date().toISOString()}] Video generated successfully: ${attemptId}`);
                         console.log('[Grok Retry Store] Video generated, count:', sessionData.videosGenerated);
+                        sessionData.pendingRetryAt = null;
+                        sessionData.pendingRetryPrompt = null;
+                        sessionData.pendingRetryOverride = false;
                     }
 
                     // Mark attempt as processed
@@ -715,6 +750,9 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
                     store.activeSessionMediaId = mediaId;
                 } else if (wasActive) {
                     store.activeSessionMediaId = null;
+                    sessionData.pendingRetryAt = null;
+                    sessionData.pendingRetryPrompt = null;
+                    sessionData.pendingRetryOverride = false;
                 }
 
                 // Clean up processedAttemptIds if session just became inactive
@@ -757,6 +795,37 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
             });
         });
     }, [postId, reloadSignal]);
+
+    // Effect to flush buffered prompt when mediaId becomes available
+    useEffect(() => {
+        const mediaId = currentMediaIdRef.current;
+        if (!mediaId || !postId) return;
+
+        const store = parseStore();
+        const bufferedPrompt = store.promptBuffer?.[postId];
+
+        if (bufferedPrompt) {
+            console.log('[Grok Retry Store] Flushing buffered prompt to persistent storage:', {
+                mediaId,
+                postId,
+                promptLength: bufferedPrompt.length
+            });
+
+            if (!store.persistentByMediaId[mediaId]) {
+                store.persistentByMediaId[mediaId] = createDefaultPersistentData();
+            }
+            store.persistentByMediaId[mediaId].lastPromptValue = bufferedPrompt;
+            delete store.promptBuffer[postId];
+            saveStore(store);
+            storeRef.current = store;
+
+            // Update local state
+            setData((prev) => {
+                if (!prev) return prev;
+                return { ...prev, lastPromptValue: bufferedPrompt };
+            });
+        }
+    }, [currentMediaIdRef.current, postId]);
 
     // Update session data (ephemeral)
     const updateSession = useCallback((updates: Partial<SessionData>) => {
@@ -802,8 +871,33 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
     // Update persistent data (survives reloads)
     const updatePersistent = useCallback((updates: Partial<PersistentData>) => {
         const mediaId = currentMediaIdRef.current;
+        const store = parseStore();
+
+        // If no mediaId yet, buffer prompt changes for later
         if (!mediaId) {
-            console.warn('[Grok Retry Store] Cannot update persistent: no mediaId');
+            if (updates.lastPromptValue !== undefined && postId) {
+                console.log('[Grok Retry Store] Buffering prompt update (no mediaId yet):', {
+                    postId,
+                    promptLength: updates.lastPromptValue.length
+                });
+                store.promptBuffer[postId] = updates.lastPromptValue;
+                saveStore(store);
+                storeRef.current = store;
+
+                // Update local state optimistically
+                setData((prev) => {
+                    if (!prev) return prev;
+                    const sessionSlice = applySessionDefaults(prev);
+                    const persistentCurrent = selectPersistentData(prev);
+                    return {
+                        ...sessionSlice,
+                        ...persistentCurrent,
+                        lastPromptValue: updates.lastPromptValue ?? ''
+                    };
+                });
+            } else if (Object.keys(updates).some(k => k !== 'lastPromptValue')) {
+                console.warn('[Grok Retry Store] Cannot update persistent (non-prompt): no mediaId');
+            }
             return;
         }
 
@@ -821,7 +915,6 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
             const updated: PostData = { ...sessionSlice, ...persistentMerged };
 
             // Update store
-            const store = parseStore();
             const storePersistent = store.persistentByMediaId[mediaId] || createDefaultPersistentData();
             store.persistentByMediaId[mediaId] = {
                 maxRetries: updates.maxRetries ?? storePersistent.maxRetries,
@@ -834,7 +927,7 @@ export const useGrokRetryVideoSessions = (postId: string | null) => {
 
             return updated;
         });
-    }, []);
+    }, [postId]);
 
     // Update both session and persistent data
     const updateAll = useCallback((sessionUpdates: Partial<SessionData>, persistentUpdates: Partial<PersistentData>) => {

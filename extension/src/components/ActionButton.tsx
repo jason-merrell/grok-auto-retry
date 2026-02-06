@@ -24,6 +24,7 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ isSessionActive, onG
 	if (isSessionActive) {
 		return (
 			<Button
+				data-testid="stop-session-button"
 				variant="destructive"
 				size="sm"
 				type="button"
@@ -42,6 +43,7 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ isSessionActive, onG
 
 	return (
 		<Button
+			data-testid="start-session-button"
 			variant="default"
 			size="sm"
 			type="button"

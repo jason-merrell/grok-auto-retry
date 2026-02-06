@@ -376,6 +376,7 @@ export const PromptTextarea: React.FC<PromptTextareaProps> = ({
 				</div>
 			</div>
 			<Textarea
+				data-testid="session-prompt-textarea"
 				placeholder="Your prompt will appear here..."
 				className={`min-h-[160px] resize-y ${isMaximized ? "text-md" : "text-xs"}`}
 				value={value}

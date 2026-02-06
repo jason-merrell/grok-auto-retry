@@ -41,6 +41,7 @@ export const ImaginePanel: React.FC<ImaginePanelProps> = ({
 }) => {
 	return (
 		<Card
+			data-testid="grok-retry-panel"
 			className="fixed shadow-xl flex flex-col bg-background"
 			style={{
 				...(isMaximized
@@ -52,13 +53,13 @@ export const ImaginePanel: React.FC<ImaginePanelProps> = ({
 							width: "100vw",
 							height: "100vh",
 							borderRadius: 0,
-					  }
+						}
 					: {
 							bottom: "16px",
 							right: "16px",
 							width: `${width}px`,
 							height: `${height}px`,
-					  }),
+						}),
 				fontSize: `${isMaximized ? Math.max(fontSize * 1.2, 14) : fontSize}px`,
 			}}
 		>
@@ -89,7 +90,12 @@ export const ImaginePanel: React.FC<ImaginePanelProps> = ({
 				<PromptPartials onAppendPartial={onPromptAppend} />
 
 				<div className="pt-2">
-					<Button onClick={onGenerateImages} className="w-full" disabled={!promptValue.trim()}>
+					<Button
+						data-testid="generate-images-button"
+						onClick={onGenerateImages}
+						className="w-full"
+						disabled={!promptValue.trim()}
+					>
 						Generate Images
 					</Button>
 				</div>

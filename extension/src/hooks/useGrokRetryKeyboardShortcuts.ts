@@ -172,6 +172,15 @@ export interface ShortcutBinding {
     allowWhileTyping?: boolean;
 }
 
+/**
+ * Registers keyboard shortcuts for Grok Retry UI interactions.
+ *
+ * Normalizes user-provided shortcut strings (including aliases/modifiers),
+ * attaches a window-level keydown listener, filters repeated events, and
+ * optionally suppresses shortcuts while typing inside editable elements.
+ *
+ * @param bindings - Shortcut configuration array mapping combos to handlers
+ */
 export const useGrokRetryKeyboardShortcuts = (bindings: ShortcutBinding[]) => {
     const parsedBindings = useMemo(() => {
         return bindings

@@ -4,6 +4,7 @@ dist.**
 **/coverage/
 **/test-results/
 **/.pw-user/
+**/.auth/
 *.log
 .DS_Store
 docs/eval**
@@ -13,3 +14,5 @@ docs/eval**
 *.pem
 **.pw**
 **.playwright-mcp**
+playwright-report/
+docs/testing**

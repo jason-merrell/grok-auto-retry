@@ -163,7 +163,7 @@ function findParentImageIdByVideoId(videoPostId: string): string | null {
  * 
  * @example
  * ```typescript
- * const grokData = useGrokStorage(currentPostId, {
+ * const grokData = useGrokRetryGrokStorage(currentPostId, {
  *   onModerationDetected: (video) => {
  *     console.log('Moderation confirmed:', video.videoId);
  *     handleModeration(video);
@@ -187,7 +187,9 @@ export function useGrokRetryGrokStorage(
     } = options;
 
     const [data, setData] = useState<GrokStorageData | null>(null);
-    const seenVideoIds = useRef(new Set<string>());
+    // Track video state changes instead of just IDs to detect moderation on retries
+    const lastVideoStateRef = useRef<string>('');
+    const lastModeratedCountRef = useRef(0);
     const resolvedParentIdRef = useRef<string | null>(null);
 
     const parseGrokStorage = useCallback((): GrokStorageData | null => {
@@ -223,8 +225,13 @@ export function useGrokRetryGrokStorage(
                     if (parentImageId) {
                         resolvedParentIdRef.current = parentImageId;
                     } else {
-                        if (debug) {
-                            console.log('[Grok Storage] Could not resolve parent image ID for:', idHint);
+                        // Suppress warning during navigation grace periods
+                        const isNavigating = (window as any).__grok_route_eval_suppress_until;
+                        const now = Date.now();
+                        if (!isNavigating || now > isNavigating) {
+                            if (debug) {
+                                console.log('[Grok Storage] Could not resolve parent image ID for:', idHint);
+                            }
                         }
                         return null;
                     }
@@ -310,32 +317,73 @@ export function useGrokRetryGrokStorage(
             const newData = parseGrokStorage();
 
             if (newData) {
-                // Check for new videos and fire callbacks
+                // Check for video state changes (handles retry moderations)
                 if (onVideoDetected || onModerationDetected) {
-                    newData.videos.forEach(video => {
-                        if (!seenVideoIds.current.has(video.videoId)) {
-                            seenVideoIds.current.add(video.videoId);
+                    // Serialize current state for comparison
+                    const currentState = JSON.stringify(
+                        newData.videos.map(v => ({
+                            id: v.videoId,
+                            moderated: v.moderated,
+                            progress: v.progress,
+                            mediaUrl: v.mediaUrl
+                        }))
+                    );
 
-                            if (debug) {
-                                console.log('[useGrokStorage] New video detected:', {
-                                    videoId: video.videoId,
-                                    moderated: video.moderated,
-                                    createTime: video.createTime
-                                });
-                            }
+                    // Detect state changes
+                    if (currentState !== lastVideoStateRef.current) {
+                        const previousVideos = lastVideoStateRef.current
+                            ? JSON.parse(lastVideoStateRef.current)
+                            : [];
 
-                            // Fire general video detection callback
-                            onVideoDetected?.(video);
+                        // Find new or changed videos
+                        newData.videos.forEach(video => {
+                            const prevVideo = previousVideos.find((p: any) => p.id === video.videoId);
+                            const isNewVideo = !prevVideo;
+                            const moderationChanged = prevVideo && !prevVideo.moderated && video.moderated;
 
-                            // Fire moderation-specific callback
-                            if (video.moderated) {
+                            if (isNewVideo) {
                                 if (debug) {
-                                    console.log('[Grok Storage] Moderated video detected:', video.videoId);
+                                    console.log('[Grok Storage] New video detected:', {
+                                        videoId: video.videoId,
+                                        moderated: video.moderated,
+                                        createTime: video.createTime
+                                    });
+                                }
+                                onVideoDetected?.(video);
+
+                                if (video.moderated) {
+                                    if (debug) {
+                                        console.log('[Grok Storage] New moderated video detected:', video.videoId);
+                                    }
+                                    onModerationDetected?.(video);
+                                }
+                            } else if (moderationChanged) {
+                                if (debug) {
+                                    console.log('[Grok Storage] Video moderation status changed:', {
+                                        videoId: video.videoId,
+                                        wasModerated: prevVideo.moderated,
+                                        nowModerated: video.moderated
+                                    });
                                 }
                                 onModerationDetected?.(video);
                             }
+                        });
+
+                        lastVideoStateRef.current = currentState;
+                    }
+
+                    // Track moderation count for additional safety
+                    if (newData.moderatedCount > lastModeratedCountRef.current) {
+                        const countDiff = newData.moderatedCount - lastModeratedCountRef.current;
+                        if (debug) {
+                            console.log('[Grok Storage] Moderation count increased:', {
+                                from: lastModeratedCountRef.current,
+                                to: newData.moderatedCount,
+                                diff: countDiff
+                            });
                         }
-                    });
+                        lastModeratedCountRef.current = newData.moderatedCount;
+                    }
                 }
 
                 setData(newData);
@@ -347,11 +395,12 @@ export function useGrokRetryGrokStorage(
         };
     }, [idHint, pollInterval, parseGrokStorage, onVideoDetected, onModerationDetected, debug]);
 
-    // Clear seen videos when parent changes
+    // Clear state tracking when parent changes
     useEffect(() => {
-        seenVideoIds.current.clear();
+        lastVideoStateRef.current = '';
+        lastModeratedCountRef.current = 0;
         if (debug) {
-            console.log('[Grok Storage] ID changed, clearing seen videos:', idHint);
+            console.log('[Grok Storage] ID changed, resetting state tracking:', idHint);
         }
     }, [idHint, debug]);
 

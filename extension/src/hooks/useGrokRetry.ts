@@ -4,10 +4,16 @@ import { findPromptInput, writePromptValue } from '../lib/promptInput';
 import { useGrokRetryVideoSessions } from './useGrokRetryVideoSessions';
 import type { SessionOutcome, SessionSummary } from './useGrokRetryVideoSessions';
 import type { PostRouteIdentity } from './useGrokRetryPostId';
-
-export const CLICK_COOLDOWN_MS = 8000; // 8 seconds between retries
+import { CLICK_COOLDOWN_MS } from '../lib/retryConstants';
 const PROGRESS_BUTTON_SELECTOR = 'button[aria-label="Video Options"]';
 const MAX_PROGRESS_RECORDS = 25;
+
+export interface ProgressTerminalEvent {
+    text: string | null;
+    previousPercent: number | null;
+}
+
+export type ProgressTerminalHandler = (event: ProgressTerminalEvent) => void;
 
 type ModerationLayer = {
     label: string;
@@ -120,6 +126,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
     const logs = postData?.logs ?? [];
     const pendingRetryAt = postData?.pendingRetryAt ?? null;
     const pendingRetryPrompt = postData?.pendingRetryPrompt ?? null;
+    const pendingRetryOverride = postData?.pendingRetryOverride ?? false;
 
     try {
         const w = window as any;
@@ -217,6 +224,8 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         }
     }, []);
 
+    const progressTerminalHandlerRef = useRef<ProgressTerminalHandler | null>(null);
+
     const startProgressObserver = useCallback(() => {
         stopProgressObserver();
 
@@ -227,12 +236,34 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         }
 
         const observer = new MutationObserver(() => {
-            const progressText = button.textContent;
+            const progressText = button.textContent ?? '';
             const percent = parseProgress(progressText);
 
             if (percent !== null && percent !== lastObservedProgressRef.current) {
                 console.log(`[Grok Retry] Progress observed: ${percent}%`);
                 recordProgressSnapshot(percent);
+            } else if (percent === null && lastObservedProgressRef.current !== null) {
+                const previousPercent = lastObservedProgressRef.current;
+                const trimmed = progressText.trim();
+                console.log('[Grok Retry] Progress indicator exited percent state', {
+                    previousPercent,
+                    text: trimmed,
+                });
+
+                lastObservedProgressRef.current = null;
+                observer.disconnect();
+                if (progressObserverRef.current === observer) {
+                    progressObserverRef.current = null;
+                }
+
+                try {
+                    progressTerminalHandlerRef.current?.({
+                        text: trimmed.length > 0 ? trimmed : null,
+                        previousPercent,
+                    });
+                } catch (error) {
+                    console.warn('[Grok Retry] Progress terminal handler error:', error);
+                }
             }
         });
 
@@ -245,6 +276,10 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         progressObserverRef.current = observer;
         console.log('[Grok Retry] Progress observer started');
     }, [stopProgressObserver, recordProgressSnapshot]);
+
+    const setProgressTerminalHandler = useCallback((handler: ProgressTerminalHandler | null) => {
+        progressTerminalHandlerRef.current = handler;
+    }, []);
 
     const markFailureDetected = useCallback((): 1 | 2 | 3 | null => {
         if (!postData) return null;
@@ -363,6 +398,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             lastAttemptTime: now,
             pendingRetryAt: null,
             pendingRetryPrompt: null,
+            pendingRetryOverride: false,
         });
 
         return true;
@@ -385,6 +421,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
                 processedAttemptIds: postId ? [postId] : [],
                 pendingRetryAt: null,
                 pendingRetryPrompt: null,
+                pendingRetryOverride: false,
             },
             {
                 lastPromptValue: prompt,
@@ -425,6 +462,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             lastSessionSummary: skipSummary ? null : summary,
             pendingRetryAt: null,
             pendingRetryPrompt: null,
+            pendingRetryOverride: false,
         });
 
         appendLog(`Session ended: ${outcome}`, outcome === 'success' ? 'success' : 'error');
@@ -469,6 +507,8 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
         forceReload,
         pendingRetryAt,
         pendingRetryPrompt,
+        pendingRetryOverride,
         updateSession,
+        setProgressTerminalHandler,
     };
 };
