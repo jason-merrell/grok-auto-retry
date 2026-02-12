@@ -118,6 +118,9 @@ export interface SessionData {
     pendingRetryAt: number | null;
     pendingRetryPrompt: string | null;
     pendingRetryOverride: boolean;
+
+    // Session activation timestamp (for stale detection grace period)
+    sessionActivatedAt?: number;
 }
 
 // Persistent preferences (survive page reloads)
@@ -251,6 +254,9 @@ const findOriginalMediaId = (postId: string, videoByMediaId: Record<string, any[
  * - mediaId no longer exists in Grok's useMediaStore
  * - This indicates Grok has cleared the media (page refresh, new session, etc.)
  * 
+ * GRACE PERIOD: Recently activated sessions (within 60 seconds) are never marked stale.
+ * This prevents premature cleanup during route changes and initial generation.
+ * 
  * @param mediaId - The media ID to validate
  * @param sessionData - The session data to validate
  * @returns true if session is valid, false if stale/invalid
@@ -259,6 +265,22 @@ const validateSessionAgainstGrokStore = (mediaId: string, sessionData: SessionDa
     // If session is not active, no need to validate
     if (!sessionData.isActive) {
         return true;
+    }
+
+    // CRITICAL FIX: Grace period for recently activated sessions
+    // Prevents cleanup during route changes and initial generation
+    const activatedAt = (sessionData as any).sessionActivatedAt;
+    if (activatedAt && typeof activatedAt === 'number') {
+        const ageMs = Date.now() - activatedAt;
+        const gracePeriodMs = 60000; // 60 seconds
+
+        if (ageMs < gracePeriodMs) {
+            console.log(
+                `[useGrokRetryVideoSessions] Session in grace period (${Math.round(ageMs / 1000)}s old), skipping stale check for mediaId:`,
+                mediaId
+            );
+            return true;
+        }
     }
 
     try {
@@ -284,7 +306,8 @@ const validateSessionAgainstGrokStore = (mediaId: string, sessionData: SessionDa
         if (!mediaExists) {
             console.warn(
                 '[useGrokRetryVideoSessions] Session is stale - mediaId not in Grok store:',
-                mediaId
+                mediaId,
+                `(session age: ${activatedAt ? Math.round((Date.now() - activatedAt) / 1000) : 'unknown'}s)`
             );
             return false;
         }
@@ -433,10 +456,12 @@ const migrateFromV0 = (): StoreState | null => {
                 // Consolidate session data by mediaId
                 if (!sessionByMediaId[mediaId]) {
                     // First session for this mediaId - convert old format to new
+                    // NOTE: Don't preserve session-specific counters (videosGenerated, retryCount)
+                    // These will be recalculated from Grok's store to avoid carrying over stale counts
                     sessionByMediaId[mediaId] = applySessionDefaults({
                         isActive: oldData.isActive ?? false,
-                        retryCount: oldData.retryCount ?? 0,
-                        videosGenerated: oldData.videosGenerated ?? 0,
+                        retryCount: 0,  // Don't preserve - will be recalculated
+                        videosGenerated: 0,  // Don't preserve - will be recalculated
                         currentPostId: postId,
                         processedAttemptIds: [postId], // Mark this attempt as processed
                         lastAttemptTime: oldData.lastAttemptTime ?? 0,
@@ -469,9 +494,13 @@ const migrateFromV0 = (): StoreState | null => {
                         existing.processedAttemptIds.push(postId);
                     }
 
-                    // Accumulate counts (important: we're consolidating multiple attempts)
-                    existing.retryCount = Math.max(existing.retryCount, oldData.retryCount ?? 0);
-                    existing.videosGenerated = Math.max(existing.videosGenerated, oldData.videosGenerated ?? 0);
+                    // NOTE: Don't preserve session-specific counters (videosGenerated, retryCount)
+                    // These should not carry over from old sessions to avoid showing stale counts
+                    // The normal counting logic will recalculate based on actual videos in Grok's store
+                    // 
+                    // OLD BEHAVIOR (caused bug where 77 videos from old session would persist):
+                    // existing.retryCount = Math.max(existing.retryCount, oldData.retryCount ?? 0);
+                    // existing.videosGenerated = Math.max(existing.videosGenerated, oldData.videosGenerated ?? 0);
 
                     // Use most recent timestamps
                     existing.lastAttemptTime = Math.max(existing.lastAttemptTime, oldData.lastAttemptTime ?? 0);
@@ -723,13 +752,25 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
                 }
             }
 
+            // Fallback #4: Check if postId exists in imageByMediaId (original image)
+            // For image posts with no video attempts yet, postId IS the mediaId
             if (!mediaId) {
-                console.warn('[Grok Retry Store] Could not find mediaId for postId:', postId, '| Available mediaIds:', Object.keys(videoByMediaId));
-                setData(null);
-                setIsLoading(false);
-                return;
+                const imageByMediaId = grokStore?.state?.imageByMediaId || {};
+                if (postId in imageByMediaId) {
+                    mediaId = postId;
+                    console.log('[Grok Retry Store] PostId found in imageByMediaId, using as mediaId (original image):', mediaId);
+                }
             }
 
+            // Fallback #5: Ultimate fallback - assume postId IS the mediaId
+            // This handles image posts where Grok hasn't loaded the data into storage yet
+            // The postId from the URL route is the mediaId for original images with no videos
+            if (!mediaId) {
+                mediaId = postId;
+                console.log('[Grok Retry Store] No mediaId found anywhere, assuming postId IS mediaId (original image):', mediaId);
+            }
+
+            // At this point, mediaId is guaranteed to have a value (from fallbacks or postId itself)
             currentMediaIdRef.current = mediaId;
             console.log('[Grok Retry Store] Found mediaId for post:', { postId, mediaId });
 
@@ -763,6 +804,10 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
             } else {
                 sessionData = applySessionDefaults(sessionData);
             }
+
+            // Track if session was active BEFORE processing new attempts
+            // This determines whether we should count new videos
+            const wasActiveBeforeProcessing = sessionData.isActive;
 
             if (hasNoAttempts && sessionData.processedAttemptIds.length > 0 && !sessionData.isActive) {
                 // Special case: We have processed attempts but Grok has no attempts
@@ -838,10 +883,25 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
                             sessionData.pendingRetryOverride = false;
                         }
                     } else {
-                        // Non-moderated video - increment videosGenerated
-                        sessionData.videosGenerated++;
-                        sessionData.logs.push(`[${new Date().toISOString()}] Video generated successfully: ${attemptId}`);
-                        console.log('[Grok Retry Store] Video generated, count:', sessionData.videosGenerated);
+                        // Non-moderated video
+                        // Only count videos if session was active when we found them
+                        // Pre-existing videos from previous sessions should not count
+                        if (wasActiveBeforeProcessing) {
+                            sessionData.videosGenerated++;
+                            sessionData.logs.push(`[${new Date().toISOString()}] Video generated successfully: ${attemptId}`);
+                            console.log('[Grok Retry Store] Video generated, count:', sessionData.videosGenerated);
+                        } else {
+                            // Pre-existing video - just mark as processed, don't count
+                            sessionData.logs.push(`[${new Date().toISOString()}] Pre-existing video found (not counted): ${attemptId}`);
+                            console.log('[Grok Retry Store] Pre-existing video found, not counting:', attemptId);
+
+                            // Capture prompt from pre-existing video for UI display
+                            const videoPrompt = attempt?.prompt || attempt?.originalPrompt;
+                            if (videoPrompt && !persistentData.lastPromptValue) {
+                                persistentData.lastPromptValue = videoPrompt;
+                                console.log('[Grok Retry Store] Captured prompt from pre-existing video:', videoPrompt);
+                            }
+                        }
                         sessionData.pendingRetryAt = null;
                         sessionData.pendingRetryPrompt = null;
                         sessionData.pendingRetryOverride = false;
@@ -857,10 +917,19 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
                 sessionData.currentPostId = postId;
 
                 // Determine if session is still active
+                // IMPORTANT: Only update isActive if session was already active
+                // Pre-existing videos should NOT trigger active state
                 const reachedGoal = sessionData.videosGenerated >= persistentData.videoGoal;
                 const maxedOut = sessionData.retryCount >= persistentData.maxRetries;
                 const wasActive = sessionData.isActive;
-                sessionData.isActive = !reachedGoal && !maxedOut && persistentData.autoRetryEnabled;
+
+                // Only keep session active if it was already active AND hasn't reached goal/max
+                if (wasActiveBeforeProcessing) {
+                    sessionData.isActive = !reachedGoal && !maxedOut && persistentData.autoRetryEnabled;
+                } else {
+                    // Session wasn't active before - keep it inactive
+                    sessionData.isActive = false;
+                }
                 sessionData.canRetry = !reachedGoal && !maxedOut;
 
                 // Update global active session tracker
@@ -882,6 +951,7 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
 
                 // Save updated session data
                 store.sessionByMediaId[mediaId] = sessionData;
+                store.persistentByMediaId[mediaId] = persistentData;
                 saveStore(store);
                 storeRef.current = store;
             } else {
@@ -976,11 +1046,53 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
     );
 
     // Update session data (ephemeral)
-    const updateSession = useCallback((updates: Partial<SessionData>) => {
-        const mediaId = currentMediaIdRef.current;
+    const updateSession = useCallback((updates: Partial<SessionData>, targetMediaId?: string) => {
+        // CRITICAL FIX: Allow caller to specify which mediaId to update (for resolved parent mediaId).
+        // If targetMediaId is provided, use it; otherwise fall back to currentMediaIdRef, then mediaIdHint, then postId.
+
+        // DEBUG: Log EVERYTHING
+        if (updates.isActive === true) {
+            console.log('[Grok Retry Store] updateSession called:');
+            console.log('  - target parameter:', targetMediaId);
+            console.log('  - targetMediaId typeof:', typeof targetMediaId);
+            console.log('  - targetMediaId truthy?', !!targetMediaId);
+            console.log('  - currentMediaIdRef.current:', currentMediaIdRef.current);
+            console.log('  - mediaIdHint:', mediaIdHint);
+            console.log('  - postId:', postId);
+        }
+
+        let mediaId = targetMediaId || currentMediaIdRef.current;
+
+        // If still no mediaId, try fallbacks
         if (!mediaId) {
-            console.warn('[Grok Retry Store] Cannot update session: no mediaId');
-            return;
+            // Try mediaIdHint first (passed from parent component)
+            if (mediaIdHint) {
+                mediaId = mediaIdHint;
+                console.warn('[Grok Retry Store] No mediaId provided, using mediaIdHint fallback:', mediaId);
+            }
+            // Otherwise try postId as ultimate fallback
+            else if (postId) {
+                mediaId = postId;
+                console.warn('[Grok Retry Store] No mediaId provided, using postId fallback:', mediaId);
+            }
+            // If we still don't have a mediaId, this is a critical error
+            else {
+                console.error('[Grok Retry Store] Cannot update session: no mediaId available (targetMediaId, currentMediaIdRef, mediaIdHint, and postId all null)');
+                console.error('[Grok Retry Store] Session update will be skipped. This should not happen.', { updates });
+                return;
+            }
+        }
+
+        // Log if using explicit target vs current route
+        if (targetMediaId && targetMediaId !== currentMediaIdRef.current) {
+            console.log('[Grok Retry Store] Updating session for explicit target mediaId:', targetMediaId, '(current route:', currentMediaIdRef.current, ')');
+        }
+
+        // Log session activation for debugging
+        if (updates.isActive === true) {
+            console.log('[Grok Retry Store] Session being activated for mediaId:', mediaId);
+        } else if (updates.isActive === false) {
+            console.log('[Grok Retry Store] Session being deactivated for mediaId:', mediaId);
         }
 
         setData((prev) => {
@@ -1005,8 +1117,10 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
             // Update global active session tracker
             if (sessionData.isActive) {
                 store.activeSessionMediaId = mediaId;
+                console.log('[Grok Retry Store] Global activeSessionMediaId set to:', mediaId);
             } else if (store.activeSessionMediaId === mediaId) {
                 store.activeSessionMediaId = null;
+                console.log('[Grok Retry Store] Global activeSessionMediaId cleared (was:', mediaId, ')');
             }
 
             saveStore(store);
@@ -1014,15 +1128,16 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
 
             return updated;
         });
-    }, []);
+    }, [mediaIdHint, postId]);
 
     // Update persistent data (survives reloads)
     const updatePersistent = useCallback((updates: Partial<PersistentData>) => {
-        const mediaId = currentMediaIdRef.current;
+        let mediaId = currentMediaIdRef.current;
         const store = parseStore();
 
-        // If no mediaId yet, buffer prompt changes for later
+        // If no mediaId yet, buffer prompt changes for later OR try fallbacks
         if (!mediaId) {
+            // Special case: buffer prompt updates until mediaId is available
             if (updates.lastPromptValue !== undefined && postId) {
                 console.log('[Grok Retry Store] Buffering prompt update (no mediaId yet):', {
                     postId,
@@ -1043,10 +1158,25 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
                         lastPromptValue: updates.lastPromptValue ?? ''
                     };
                 });
-            } else if (Object.keys(updates).some(k => k !== 'lastPromptValue')) {
-                console.warn('[Grok Retry Store] Cannot update persistent (non-prompt): no mediaId');
+                return;
             }
-            return;
+
+            // For non-prompt updates, try fallbacks (matching updateSession strategy)
+            if (Object.keys(updates).some(k => k !== 'lastPromptValue')) {
+                if (mediaIdHint) {
+                    mediaId = mediaIdHint;
+                    console.warn('[Grok Retry Store] currentMediaIdRef not set for persistent update, using mediaIdHint:', mediaId);
+                } else if (postId) {
+                    mediaId = postId;
+                    console.warn('[Grok Retry Store] currentMediaIdRef not set for persistent update, using postId:', mediaId);
+                } else {
+                    console.warn('[Grok Retry Store] Cannot update persistent (non-prompt): no mediaId available');
+                    return;
+                }
+            } else {
+                // Only prompt updates and no mediaId, already handled above
+                return;
+            }
         }
 
         setData((prev) => {
@@ -1075,14 +1205,24 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
 
             return updated;
         });
-    }, [postId]);
+    }, [mediaIdHint, postId]);
 
     // Update both session and persistent data
     const updateAll = useCallback((sessionUpdates: Partial<SessionData>, persistentUpdates: Partial<PersistentData>) => {
-        const mediaId = currentMediaIdRef.current;
+        let mediaId = currentMediaIdRef.current;
+
+        // Use fallback strategy like updateSession
         if (!mediaId) {
-            console.warn('[Grok Retry Store] Cannot update all: no mediaId');
-            return;
+            if (mediaIdHint) {
+                mediaId = mediaIdHint;
+                console.warn('[Grok Retry Store] currentMediaIdRef not set for updateAll, using mediaIdHint:', mediaId);
+            } else if (postId) {
+                mediaId = postId;
+                console.warn('[Grok Retry Store] currentMediaIdRef not set for updateAll, using postId:', mediaId);
+            } else {
+                console.error('[Grok Retry Store] Cannot update all: no mediaId available');
+                return;
+            }
         }
 
         setData((prev) => {
@@ -1120,7 +1260,7 @@ export const useGrokRetryVideoSessions = (postId: string | null, mediaIdHint?: s
 
             return updated;
         });
-    }, []);
+    }, [mediaIdHint, postId]);
 
     // Clear session data (for new session)
     const clearSession = useCallback(() => {

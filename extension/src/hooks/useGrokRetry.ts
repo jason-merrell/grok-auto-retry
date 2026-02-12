@@ -8,6 +8,121 @@ import { CLICK_COOLDOWN_MS } from '../lib/retryConstants';
 const PROGRESS_BUTTON_SELECTOR = 'button[aria-label="Video Options"]';
 const MAX_PROGRESS_RECORDS = 25;
 
+/**
+ * Resolve parent image mediaId from any postId (parent, intermediate route, or video).
+ * CRITICAL: DOM extraction FIRST to get the actual source image being used for generation.
+ * This prevents tracking the wrong parent when navigating from old videos.
+ * 
+ * @param postId - Current route postId (may be parent, intermediate, or video)
+ * @returns Parent image mediaId, or null if not found
+ */
+function resolveParentMediaId(postId: string | null): string | null {
+    if (!postId) {
+        console.warn('[Grok Retry] Cannot resolve mediaId - no postId provided');
+        return null;
+    }
+
+    // PRIORITY 1: DOM extraction (authoritative source image currently displayed)
+    // This is the MOST reliable source for the actual parent being used for generation
+    const domMediaId = findPrimaryImageMediaIdFromDOM();
+    if (domMediaId) {
+        console.log('[Grok Retry] Resolved parent mediaId from DOM (highest priority):', domMediaId);
+        return domMediaId;
+    }
+
+    try {
+        const storeData = sessionStorage.getItem('useMediaStore');
+        if (!storeData) {
+            console.warn('[Grok Retry] Cannot resolve mediaId - Grok useMediaStore not found, DOM extraction also failed');
+            return postId; // Last resort
+        }
+
+        const store = JSON.parse(storeData);
+        const videoByMediaId = store.state?.videoByMediaId;
+
+        if (!videoByMediaId || typeof videoByMediaId !== 'object') {
+            console.warn('[Grok Retry] Cannot resolve mediaId - invalid Grok store structure, DOM extraction also failed');
+            return postId;
+        }
+
+        // PRIORITY 2: Check if postId is already a parent image ID (exists as key)
+        if (postId in videoByMediaId) {
+            console.log('[Grok Retry] postId is already a parent mediaId:', postId);
+            return postId;
+        }
+
+        // PRIORITY 3: Search for video with this postId to find its parent
+        for (const [parentId, videos] of Object.entries(videoByMediaId)) {
+            if (!Array.isArray(videos)) continue;
+
+            const found = videos.find((v: any) => {
+                if (!v || typeof v !== 'object') return false;
+                return v.videoId === postId || v.id === postId || v.parentPostId === postId;
+            });
+
+            if (found) {
+                console.log(`[Grok Retry] Resolved parent mediaId from Grok store: ${parentId} (for video postId: ${postId})`);
+                return parentId;
+            }
+        }
+
+        // PRIORITY 4: Last resort - use postId itself
+        console.log('[Grok Retry] Could not resolve parent mediaId, using postId as last resort:', postId);
+        return postId;
+    } catch (error) {
+        console.error('[Grok Retry] Error resolving parent mediaId:', error);
+        // Try DOM fallback on error
+        const domMediaId = findPrimaryImageMediaIdFromDOM();
+        if (domMediaId) {
+            console.log('[Grok Retry] Error occurred, using DOM-based mediaId as fallback:', domMediaId);
+            return domMediaId;
+        }
+        return postId; // Last resort
+    }
+}
+
+/**
+ * Extract parent image mediaId from DOM by finding the primary image element.
+ * This is used as a fallback when Grok's storage is not yet available.
+ * 
+ * @returns mediaId extracted from the primary image URL, or null if not found
+ */
+function findPrimaryImageMediaIdFromDOM(): string | null {
+    try {
+        // Look for the primary image - same logic as findPrimaryMediaId from utils
+        const root = document.querySelector("video#sd-video")?.closest(".group.relative");
+        const candidate = root?.querySelector<HTMLImageElement>("img[src*='imagine-public/images/']");
+
+        if (candidate) {
+            const src = candidate.getAttribute("src");
+            if (src) {
+                // Extract mediaId from URL like: .../imagine-public/images/{mediaId}.jpg
+                const match = src.match(/imagine-public\/images\/([a-f0-9-]+)/);
+                if (match) {
+                    return match[1];
+                }
+            }
+        }
+
+        // Fallback: try any image with the pattern
+        const fallback = document.querySelector<HTMLImageElement>("img[src*='imagine-public/images/']");
+        if (fallback) {
+            const src = fallback.getAttribute("src");
+            if (src) {
+                const match = src.match(/imagine-public\/images\/([a-f0-9-]+)/);
+                if (match) {
+                    return match[1];
+                }
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error('[Grok Retry] Error finding primary image from DOM:', error);
+        return null;
+    }
+}
+
 export interface ProgressTerminalEvent {
     text: string | null;
     previousPercent: number | null;
@@ -400,6 +515,26 @@ export const useGrokRetry = ({
         (prompt: string) => {
             console.log("[Grok Retry] Starting session with prompt:", prompt);
 
+            // CRITICAL FIX: Resolve parent mediaId before activating session
+            // This prevents tracking wrong mediaId when route changes during generation
+            const resolvedMediaId = resolveParentMediaId(postId);
+            if (!resolvedMediaId) {
+                console.error("[Grok Retry] Cannot start session - failed to resolve parent mediaId from postId:", postId);
+                return;
+            }
+
+            if (resolvedMediaId !== postId) {
+                console.log(`[Grok Retry] Resolved parent mediaId: ${resolvedMediaId} from postId: ${postId}`);
+            }
+
+            // DEBUG: Log what we're about to pass
+            console.log('[Grok Retry] Calling updateSession with:');
+            console.log('  - First arg (updates):', { isActive: true, retryCount: 0 });
+            console.log('  - Second arg (resolvedMediaId):', resolvedMediaId);
+            console.log('  - typeof resolvedMediaId:', typeof resolvedMediaId);
+
+            // CRITICAL FIX: Pass resolvedMediaId as second parameter to updateSession
+            // This ensures we activate the session for the PARENT image, not the current route
             updateSession({
                 isActive: true,
                 retryCount: 0,
@@ -407,15 +542,16 @@ export const useGrokRetry = ({
                 currentAttemptNumber: 1,
                 canRetry: true,
                 outcome: "pending",
-                currentPostId: postId,
-                processedAttemptIds: postId ? [postId] : [],
+                currentPostId: resolvedMediaId, // Use resolved mediaId instead of postId
+                processedAttemptIds: resolvedMediaId ? [resolvedMediaId] : [],
                 pendingRetryAt: null,
                 pendingRetryPrompt: null,
                 pendingRetryOverride: false,
                 logs: [],
                 attemptProgress: [],
                 lastSessionSummary: null,
-            });
+                sessionActivatedAt: Date.now(), // Track activation time for stale detection grace period
+            }, resolvedMediaId); // PASS RESOLVED MEDIA ID HERE
 
             updatePersistent({
                 lastPromptValue: prompt,

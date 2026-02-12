@@ -105,6 +105,73 @@ export const useGrokRetrySessionController = ({
         retryStateRef.current = { retryCount, maxRetries, autoRetryEnabled };
     }, [retryCount, maxRetries, autoRetryEnabled]);
 
+    // Polling-based retry executor - monitors pendingRetryAt and fires retry when time arrives
+    // This replaces the unreliable setTimeout approach that was mysteriously not firing
+    useEffect(() => {
+        if (!pendingRetryAt) {
+            return;
+        }
+
+        console.log("[Grok Retry] 🔍 Retry polling started", {
+            pendingRetryAt: new Date(pendingRetryAt).toISOString(),
+            timeUntilRetry: pendingRetryAt - Date.now(),
+        });
+
+        const checkInterval = setInterval(() => {
+            const now = Date.now();
+            if (now >= pendingRetryAt) {
+                console.log("[Grok Retry] 🚀 Retry time reached, executing retry!", {
+                    scheduledTime: new Date(pendingRetryAt).toISOString(),
+                    actualTime: new Date(now).toISOString(),
+                    delayMs: now - pendingRetryAt,
+                });
+
+                clearInterval(checkInterval);
+                pendingModerationRetryRef.current = false;
+
+                // Clear pending retry state
+                updateSession({
+                    pendingRetryAt: null,
+                    pendingRetryPrompt: null,
+                    pendingRetryOverride: false,
+                });
+
+                // Execute retry with stored prompt and override flag
+                const retryPrompt = sessionPromptRef.current ?? lastPromptValue;
+                console.log("[Grok Retry] Executing retry with prompt:", {
+                    hasPrompt: !!retryPrompt,
+                    promptLength: retryPrompt?.length ?? 0,
+                });
+
+                const clicked = clickMakeVideoButton(retryPrompt ?? undefined, {
+                    overridePermit: true,
+                });
+
+                if (clicked) {
+                    console.log("[Grok Retry] ✅ Retry click succeeded");
+                    addLogEntry("Retry click succeeded (polling-based)", "info");
+
+                    if (retryPrompt) {
+                        sessionPromptRef.current = retryPrompt;
+                    }
+
+                    // Start progress observer for new attempt
+                    setTimeout(() => {
+                        startProgressObserver();
+                    }, 800);
+                } else {
+                    console.warn("[Grok Retry] ❌ Retry click failed, will reschedule via watchdog");
+                    addLogEntry("Retry click failed (polling-based)", "warn");
+                }
+            }
+        }, 1000); // Check every second
+
+        return () => {
+            console.log("[Grok Retry] 🛑 Retry polling stopped");
+            clearInterval(checkInterval);
+        };
+    }, [pendingRetryAt, clickMakeVideoButton, startProgressObserver, updateSession, lastPromptValue, addLogEntry]);
+
     const recordPromptOutcome = useCallback(
         (status: "success" | "failure", layer?: PromptHistoryLayer | null) => {
             const baseText = sessionPromptRef.current ?? lastPromptValue;
@@ -217,80 +284,15 @@ export const useGrokRetrySessionController = ({
                 pendingRetryOverride: shouldOverrideGuard,
             });
 
-            nextVideoTimeoutRef.current = setTimeout(() => {
-                const isSessionActive = isSessionActiveRef.current;
-                const lastAttemptTime = lastAttemptTimeRef.current;
-                const retryPrompt = persistedPrompt;
-                const timerContext = `retry-timer:${context}`;
-
-                console.log("[Grok Retry] Retry timer fired", {
-                    context: timerContext,
-                    hasPersistedPrompt: !!persistedPrompt,
-                    pendingModerationRetry: pendingModerationRetryRef.current,
-                    lastAttemptTime,
-                });
-                addLogEntry(`Retry timer fired (${timerContext})`, "info");
-                pendingModerationRetryRef.current = false;
-                nextVideoTimeoutRef.current = null;
-
-                if (!isSessionActive) {
-                    console.log("[Grok Retry] Retry timer aborted - session inactive", { context: timerContext });
-                    addLogEntry(`Retry timer aborted - session inactive (${timerContext})`, "warn");
-                    updateSession({ pendingRetryAt: null, pendingRetryPrompt: null, pendingRetryOverride: false });
-                    return;
-                }
-
-                const clicked = clickMakeVideoButton(retryPrompt ?? undefined, {
-                    overridePermit: shouldOverrideGuard,
-                });
-                if (clicked) {
-                    console.log("[Grok Retry] Retry click succeeded", {
-                        context: timerContext,
-                        hasRetryPrompt: !!retryPrompt,
-                    });
-                    addLogEntry(`Retry click succeeded (${timerContext})`, "info");
-                    if (retryPrompt) {
-                        sessionPromptRef.current = retryPrompt;
-                    }
-
-                    // Increment attempt number for next progress tracking
-                    updateSession({
-                        pendingRetryAt: null,
-                        pendingRetryPrompt: null,
-                        pendingRetryOverride: false,
-                        currentAttemptNumber: (retryCount || 0) + 2  // retryCount + 1 for next attempt + 1 for base
-                    });
-
-                    setTimeout(() => {
-                        if (isSessionActive) {
-                            startProgressObserver();
-                        }
-                    }, 800);
-                    return;
-                }
-
-                console.warn("[Grok Retry] Retry click blocked - rescheduling", {
-                    context: timerContext,
-                    hasRetryPrompt: !!retryPrompt,
-                    lastAttemptTime,
-                });
-                addLogEntry(`Retry click blocked - rescheduling (${timerContext})`, "warn");
-                const cooldownRemaining = lastAttemptTime
-                    ? Math.max(0, lastAttemptTime + CLICK_COOLDOWN_MS - Date.now())
-                    : 0;
-                const fallbackDelay = Math.max(cooldownRemaining + 200, 1500);
-                const rescheduleContext = context ? `${context}:fallback` : "fallback";
-                scheduleRetryAttempt(retryPrompt ?? null, fallbackDelay, rescheduleContext, options);
-            }, normalizedDelay);
+            // Note: We no longer use setTimeout here - the polling-based useEffect will execute the retry
+            console.log("[Grok Retry] ⏱️  Retry scheduled (polling-based)", {
+                context,
+                targetTime: new Date(targetTime).toISOString(),
+                delayMs: normalizedDelay,
+                delaySeconds,
+            });
         },
         [
-            capturePromptFromSite,
-            clickMakeVideoButton,
-            isSessionActive,
-            lastAttemptTime,
-            lastPromptValue,
-            sessionPromptRef,
-            startProgressObserver,
             updateSession,
             addLogEntry,
         ]
@@ -375,7 +377,10 @@ export const useGrokRetrySessionController = ({
                 sessionPromptRef.current = promptSnapshot;
             }
 
+            // CRITICAL: Only clear existing retry timer if we're going to schedule a new one.
+            // If watchdog already scheduled a retry, don't interfere with it!
             if (nextVideoTimeoutRef.current) {
+                console.log("[Grok Retry] Clearing previous retry timer to schedule new moderation retry");
                 clearTimeout(nextVideoTimeoutRef.current);
                 nextVideoTimeoutRef.current = null;
             }
@@ -687,20 +692,120 @@ export const useGrokRetrySessionController = ({
             console.log("[Grok Retry] Progress observer terminal event", event);
             addLogEntry(`Progress observer terminal event: ${event.text ?? 'No text'}`, "info");
 
-            // Add delays to let DOM/storage stabilize before validation
-            // This prevents race conditions where both validations fire before Grok updates
+            // Wait for DOM/storage to stabilize, then check Grok storage ONCE to determine outcome
+            // This prevents race conditions where both moderation and success handlers fire
             setTimeout(() => {
-                requestModerationValidation("ui");
-            }, 500);
+                if (!postId) {
+                    console.warn('[Grok Retry] No postId available after progress complete');
+                    return;
+                }
 
-            setTimeout(() => {
-                requestSuccessValidation();
-            }, 600);
+                try {
+                    // Read Grok storage to determine actual outcome
+                    const grokStoreRaw = sessionStorage.getItem('useMediaStore');
+                    if (!grokStoreRaw) {
+                        console.warn('[Grok Retry] No Grok storage found after progress complete');
+                        addLogEntry('No Grok storage found after progress complete', 'warn');
+                        return;
+                    }
+
+                    const grokStore = JSON.parse(grokStoreRaw);
+                    let videos = grokStore?.state?.videoByMediaId?.[postId];
+                    let actualParentId = postId;
+
+                    // DUAL-SEARCH STRATEGY: Handle Grok's storage mismatch
+                    // If not found in tracked parent, search ALL parents (fallback for URL context mismatch)
+                    if (!videos || !Array.isArray(videos) || videos.length === 0) {
+                        console.log('[Grok Retry] Video not found in tracked parent, searching all parents...', {
+                            trackedParent: postId
+                        });
+
+                        const videoByMediaId = grokStore?.state?.videoByMediaId;
+                        if (videoByMediaId && typeof videoByMediaId === 'object') {
+                            // Search all parents for any videos
+                            for (const [parentId, parentVideos] of Object.entries(videoByMediaId)) {
+                                if (Array.isArray(parentVideos) && parentVideos.length > 0) {
+                                    // Check if any video was recently created (within last 10 seconds)
+                                    const recentVideos = parentVideos.filter((v: any) => {
+                                        if (!v?.createTime) return false;
+                                        const createdAt = new Date(v.createTime).getTime();
+                                        const age = Date.now() - createdAt;
+                                        return age < 10000; // Within last 10 seconds
+                                    });
+
+                                    if (recentVideos.length > 0) {
+                                        console.log('[Grok Retry] Found recent videos in different parent!', {
+                                            trackedParent: postId,
+                                            actualParent: parentId,
+                                            videoCount: recentVideos.length
+                                        });
+                                        addLogEntry(`Video found in alternate parent (Grok storage mismatch): ${parentId}`, 'info');
+                                        videos = parentVideos;
+                                        actualParentId = parentId;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!videos || !Array.isArray(videos) || videos.length === 0) {
+                        console.warn('[Grok Retry] No videos found in storage after progress complete (checked all parents)');
+                        addLogEntry('No videos found in storage after progress complete', 'warn');
+                        return;
+                    }
+
+                    // Get the most recent video (last in array)
+                    const latestVideo = videos[videos.length - 1];
+
+                    if (latestVideo.moderated === true) {
+                        // Video was moderated - trigger only moderation handler
+                        console.log('[Grok Retry] Progress complete: moderated video detected', {
+                            videoId: latestVideo.videoId,
+                            hasMediaUrl: !!latestVideo.mediaUrl,
+                            parentId: actualParentId
+                        });
+                        addLogEntry('Progress complete: moderated video detected', 'warn');
+                        requestModerationValidation("ui");
+                    } else if (latestVideo.mediaUrl && latestVideo.progress === 100) {
+                        // Video succeeded - trigger only success handler
+                        console.log('[Grok Retry] Progress complete: successful video detected', {
+                            videoId: latestVideo.videoId,
+                            mediaUrl: latestVideo.mediaUrl,
+                            parentId: actualParentId,
+                            usedFallback: actualParentId !== postId
+                        });
+                        addLogEntry('Progress complete: successful video detected', 'success');
+                        requestSuccessValidation();
+                    } else {
+                        // Ambiguous state - wait longer and re-check
+                        console.warn('[Grok Retry] Progress complete but video state unclear, waiting...', {
+                            moderated: latestVideo.moderated,
+                            hasMediaUrl: !!latestVideo.mediaUrl,
+                            progress: latestVideo.progress
+                        });
+                        addLogEntry('Progress complete but video state unclear, waiting...', 'info');
+
+                        // Re-check after additional delay
+                        setTimeout(() => {
+                            requestModerationValidation("ui");
+                            setTimeout(() => requestSuccessValidation(), 100);
+                        }, 1000);
+                    }
+                } catch (error) {
+                    console.error('[Grok Retry] Error checking storage after progress complete:', error);
+                    addLogEntry(`Error checking storage: ${error}`, 'error');
+
+                    // Fallback to original dual-check approach
+                    requestModerationValidation("ui");
+                    setTimeout(() => requestSuccessValidation(), 100);
+                }
+            }, 500);
         };
 
         setProgressTerminalHandler(handler);
         return () => setProgressTerminalHandler(null);
-    }, [requestModerationValidation, requestSuccessValidation, setProgressTerminalHandler, addLogEntry]);
+    }, [requestModerationValidation, requestSuccessValidation, setProgressTerminalHandler, addLogEntry, postId]);
 
     return {
         nextVideoTimeoutRef,
