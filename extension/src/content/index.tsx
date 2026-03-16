@@ -9,7 +9,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "../styles/globals.css";
 
-const BUILD_ID = "CS-20260316D";
+const BUILD_ID = "CS-20260316E";
 console.log(`[Grok Retry] Extension script starting... (${BUILD_ID})`);
 
 // Singleton flag to prevent multiple initializations

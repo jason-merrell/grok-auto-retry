@@ -1,10 +1,9 @@
-import { useEffect, useCallback, useState, useRef } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { selectors } from "../config/selectors";
 
 const MODERATION_TEXT = "Content Moderated. Try a different idea.";
 const RATE_LIMIT_TEXT = "Rate limit reached";
-const MODERATION_TRIGGER_COOLDOWN_MS = 5000; // hard guard between callbacks
-const MODERATION_HOLD_MS = 2000; // keep detected state for stability
+const MODERATION_TRIGGER_COOLDOWN_MS = 5000; // minimum ms between callback invocations
 
 interface ModerationDetectorOptions {
 	onModerationDetected: () => void;
@@ -13,24 +12,26 @@ interface ModerationDetectorOptions {
 }
 
 export const useModerationDetector = ({ onModerationDetected, onRateLimitDetected, enabled }: ModerationDetectorOptions) => {
-	const [moderationDetected, setModerationDetected] = useState(false);
-	const [rateLimitDetected, setRateLimitDetected] = useState(false);
-	const [debounceTimeout, setDebounceTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
-	const lastToastTextRef = useRef<string>("");
+	// All gating state lives in refs to avoid stale-closure issues with useCallback
 	const lastTriggerAtRef = useRef<number>(0);
-	const lastModerationFingerprintRef = useRef<string>("");
-
+	const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const rateLimitFiredRef = useRef(false);
+	const moderationVisibleRef = useRef(false);
 	const diagLoggedRef = useRef(false);
+
+	// Keep latest callbacks in refs so the check function never goes stale
+	const onModRef = useRef(onModerationDetected);
+	onModRef.current = onModerationDetected;
+	const onRLRef = useRef(onRateLimitDetected);
+	onRLRef.current = onRateLimitDetected;
 
 	const checkForModeration = useCallback(() => {
 		let isModerationDetected = false;
 		let isRateLimitDetected = false;
 
-		// Strategy 1: Check notifications section (aria-label*="Notifications")
-		// Grok renders toasts inside <section aria-label="Notifications alt+T" aria-live="polite">
 		const notificationsSection = document.querySelector(selectors.notifications.section);
 
-		// One-time diagnostic log
+		// One-time diagnostic
 		if (!diagLoggedRef.current) {
 			diagLoggedRef.current = true;
 			console.log("[Grok Retry] ModerationDetector diag", {
@@ -42,92 +43,53 @@ export const useModerationDetector = ({ onModerationDetected, onRateLimitDetecte
 		}
 
 		if (notificationsSection) {
-			// First try: specific toast element
-			const latestToast = notificationsSection.querySelector<HTMLLIElement>('li.toast[data-visible="true"]');
-			const textNode = latestToast?.querySelector<HTMLElement>("span, div");
-			const toastText = textNode?.textContent ?? "";
-			if (toastText && toastText !== lastToastTextRef.current) {
-				lastToastTextRef.current = toastText;
-			}
-			if (toastText.includes(MODERATION_TEXT)) isModerationDetected = true;
-			if (toastText.includes(RATE_LIMIT_TEXT)) isRateLimitDetected = true;
-
-			// Second try: scan ALL text in the notifications section (toast structure may vary)
-			if (!isModerationDetected) {
-				const sectionText = notificationsSection.textContent ?? "";
-				if (sectionText.includes(MODERATION_TEXT)) isModerationDetected = true;
-				if (sectionText.includes(RATE_LIMIT_TEXT)) isRateLimitDetected = true;
-			}
-
-			// Log whenever notification section has non-empty content (toast appeared)
-			const sectionText = notificationsSection.textContent?.trim() ?? "";
-			if (sectionText.length > 0) {
-				console.log("[Grok Retry] Notification section has content:", JSON.stringify(sectionText.substring(0, 200)));
-			}
+			const sectionText = notificationsSection.textContent ?? "";
+			if (sectionText.includes(MODERATION_TEXT)) isModerationDetected = true;
+			if (sectionText.includes(RATE_LIMIT_TEXT)) isRateLimitDetected = true;
 		}
 
-		// Strategy 2: Scan full document body as fallback
+		// Fallback: full body scan
 		if (!isModerationDetected) {
 			const bodyText = document.body?.textContent ?? "";
-			isModerationDetected = bodyText.includes(MODERATION_TEXT);
-			isRateLimitDetected = isRateLimitDetected || bodyText.includes(RATE_LIMIT_TEXT);
+			if (bodyText.includes(MODERATION_TEXT)) isModerationDetected = true;
+			if (!isRateLimitDetected && bodyText.includes(RATE_LIMIT_TEXT)) isRateLimitDetected = true;
 		}
 
-		// Handle moderation detection
-		if (isModerationDetected && !moderationDetected) {
-			// Don't schedule a new timeout if one is already pending
-			if (debounceTimeout) {
-				return; // Already processing this moderation event
+		// --- Moderation handling ---
+		if (isModerationDetected) {
+			// Track edge: was NOT visible last check → IS visible now  (rising edge)
+			const isRisingEdge = !moderationVisibleRef.current;
+			moderationVisibleRef.current = true;
+
+			if (isRisingEdge && !pendingTimerRef.current) {
+				// Schedule callback (debounce 100ms)
+				pendingTimerRef.current = setTimeout(() => {
+					pendingTimerRef.current = null;
+					const now = Date.now();
+					if (now - lastTriggerAtRef.current < MODERATION_TRIGGER_COOLDOWN_MS) {
+						console.log("[Grok Retry] Moderation detected but cooldown active, skipping callback");
+						return;
+					}
+					lastTriggerAtRef.current = now;
+					console.log("[Grok Retry] Moderation detected — firing callback");
+					try {
+						(window as any).__grok_append_log?.("Moderation detected", "warn");
+					} catch {}
+					onModRef.current();
+				}, 100);
 			}
-
-			// Create a fingerprint for this moderation event to deduplicate
-			const notificationsSection = document.querySelector(selectors.notifications.section);
-			const latestToast = notificationsSection?.querySelector<HTMLLIElement>('li.toast[data-visible="true"]');
-			const toastText = latestToast?.textContent?.trim() || "";
-			const timestamp = Math.floor(Date.now() / 1000); // Round to nearest second
-			const fingerprint = `${toastText}_${timestamp}`;
-
-			// Only proceed if this is a new unique moderation event
-			if (fingerprint === lastModerationFingerprintRef.current) {
-				return; // Same event, ignore
-			}
-			lastModerationFingerprintRef.current = fingerprint;
-
-			// Debounce the callback to prevent multiple rapid fires
-			const timeout = setTimeout(() => {
-				// Guard: prevent multiple triggers within cooldown window
-				const now = Date.now();
-				if (now - lastTriggerAtRef.current < MODERATION_TRIGGER_COOLDOWN_MS) {
-					setDebounceTimeout(null);
-					return;
-				}
-				lastTriggerAtRef.current = now;
-				setModerationDetected(true);
-				console.log("[Grok Retry] Moderation detected");
-				try {
-					(window as any).__grok_append_log?.("Moderation detected", "warn");
-				} catch {}
-				onModerationDetected();
-				setDebounceTimeout(null);
-			}, 100);
-
-			setDebounceTimeout(timeout);
-		} else if (!isModerationDetected && moderationDetected) {
-			// Hold the detected state briefly to avoid oscillation on attribute churn
-			const now = Date.now();
-			if (now - lastTriggerAtRef.current >= MODERATION_HOLD_MS) {
-				setModerationDetected(false);
-			}
+		} else {
+			// Text disappeared → reset edge tracker so the NEXT appearance fires again
+			moderationVisibleRef.current = false;
 		}
 
-		// Handle rate limit detection
-		if (isRateLimitDetected && !rateLimitDetected) {
-			if (debounceTimeout) {
-				clearTimeout(debounceTimeout);
-				setDebounceTimeout(null);
+		// --- Rate limit handling ---
+		if (isRateLimitDetected && !rateLimitFiredRef.current) {
+			rateLimitFiredRef.current = true;
+			if (pendingTimerRef.current) {
+				clearTimeout(pendingTimerRef.current);
+				pendingTimerRef.current = null;
 			}
-
-			setRateLimitDetected(true);
 			console.warn("[Grok Retry] Rate limit detected — cancelling active sessions");
 			try {
 				(window as any).__grok_append_log?.(
@@ -135,21 +97,22 @@ export const useModerationDetector = ({ onModerationDetected, onRateLimitDetecte
 					"warn"
 				);
 			} catch {}
-			onRateLimitDetected?.();
-		} else if (!isRateLimitDetected && rateLimitDetected) {
-			setRateLimitDetected(false);
+			onRLRef.current?.();
+		} else if (!isRateLimitDetected) {
+			rateLimitFiredRef.current = false;
 		}
-
-		return isModerationDetected || isRateLimitDetected;
-	}, [moderationDetected, rateLimitDetected, onModerationDetected, onRateLimitDetected, debounceTimeout]);
+	}, []); // No deps — everything is refs
 
 	useEffect(() => {
 		if (!enabled) return;
 
+		// Reset edge tracker when hook re-enables so existing toast is treated as new
+		moderationVisibleRef.current = false;
+
 		// Initial check
 		checkForModeration();
 
-		// Observe the notifications section (where toasts appear) AND document.body as fallback
+		// Observe notifications section + body
 		const notifSection = document.querySelector(selectors.notifications.section);
 		const targets: Node[] = [];
 		if (notifSection) targets.push(notifSection);
@@ -162,25 +125,25 @@ export const useModerationDetector = ({ onModerationDetected, onRateLimitDetecte
 		});
 
 		for (const target of targets) {
-			observer.observe(target, {
-				childList: true,
-				subtree: true,
-			});
+			observer.observe(target, { childList: true, subtree: true });
 		}
 
-		// Polling fallback: the MutationObserver target may not encompass
-		// the actual notifications container, so poll as a safety net.
+		// Polling fallback
 		const pollId = setInterval(checkForModeration, 1500);
 
 		return () => {
 			observer.disconnect();
 			clearInterval(pollId);
-			// Clear debounce timeout on cleanup
-			if (debounceTimeout) {
-				clearTimeout(debounceTimeout);
+			if (pendingTimerRef.current) {
+				clearTimeout(pendingTimerRef.current);
+				pendingTimerRef.current = null;
 			}
 		};
-	}, [enabled, checkForModeration, debounceTimeout]);
+	}, [enabled, checkForModeration]);
 
-	return { moderationDetected, rateLimitDetected, checkForModeration };
+	return {
+		moderationDetected: moderationVisibleRef.current,
+		rateLimitDetected: rateLimitFiredRef.current,
+		checkForModeration,
+	};
 };
