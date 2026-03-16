@@ -68,9 +68,14 @@ export const useModerationDetector = ({ onModerationDetected, onRateLimitDetecte
 					const now = Date.now();
 					if (now - lastTriggerAtRef.current < MODERATION_TRIGGER_COOLDOWN_MS) {
 						console.log("[Grok Retry] Moderation detected but cooldown active, skipping callback");
+						// Reset so the next poll cycle re-fires after cooldown expires
+						moderationVisibleRef.current = false;
 						return;
 					}
 					lastTriggerAtRef.current = now;
+					// Reset edge tracker AFTER firing so repeated presence re-triggers
+					// (gated by the cooldown above)
+					moderationVisibleRef.current = false;
 					console.log("[Grok Retry] Moderation detected — firing callback");
 					try {
 						(window as any).__grok_append_log?.("Moderation detected", "warn");

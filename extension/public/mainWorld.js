@@ -8,10 +8,36 @@
 (function () {
 	"use strict";
 
-	var BUILD_ID = "MW-20260316B";
+	var BUILD_ID = "MW-20260316C";
 
 	if (window.__grokRetryInterceptorInstalled) return;
 	window.__grokRetryInterceptorInstalled = true;
+
+	/* ---- Force tab to appear always-visible to Grok ---- */
+	try {
+		Object.defineProperty(document, "visibilityState", {
+			get: function () {
+				return "visible";
+			},
+			configurable: true,
+		});
+		Object.defineProperty(document, "hidden", {
+			get: function () {
+				return false;
+			},
+			configurable: true,
+		});
+		document.addEventListener(
+			"visibilitychange",
+			function (e) {
+				e.stopImmediatePropagation();
+			},
+			true
+		);
+		console.log("[Grok Retry MW] Page Visibility API overridden — tab always appears active");
+	} catch (e) {
+		console.warn("[Grok Retry MW] Failed to override visibility API:", e);
+	}
 
 	var decoder = new TextDecoder();
 

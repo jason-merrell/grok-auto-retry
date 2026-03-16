@@ -8,6 +8,7 @@ import { clearVideoAttemptsByImageReference } from "../lib/grokStream";
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
 const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
+const STALL_DETECT_DELAY = 15000; // 15 seconds after click before checking for stall
 const PROGRESS_BUTTON_SELECTOR = 'button[aria-label="Video Options"]';
 const MAX_PROGRESS_RECORDS = 25;
 const SESSION_STORAGE_PREFIX = "grokRetrySession_";
@@ -517,13 +518,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
 			};
 			saveAll({
 				isSessionActive: false,
-				retryCount: 0,
-				videosGenerated: 0,
 				canRetry: false,
-				creditsUsed: 0,
-				layer1Failures: 0,
-				layer2Failures: 0,
-				layer3Failures: 0,
 				lastSessionOutcome: outcome,
 				lastSessionSummary: summary,
 				sessionMediaId: null,
@@ -807,7 +802,37 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
 					return;
 				}
 
-				if (!spacingOk || !underLimit || !permitted) return;
+				if (!spacingOk || !underLimit || !permitted) {
+					// Stall detection: if enough time has passed since click, generation
+					// overlay is gone, no success video appeared, and retry is not yet
+					// permitted — the generation likely failed silently (e.g. tab was
+					// inactive and the moderation toast was never rendered).
+					if (
+						!permitted &&
+						underLimit &&
+						postData.lastAttemptTime > 0 &&
+						now - postData.lastAttemptTime >= STALL_DETECT_DELAY
+					) {
+						// Check if generation overlay is still visible
+						const progressSpans = document.querySelectorAll<HTMLElement>(
+							"span.tabular-nums, span.animate-pulse"
+						);
+						let generationActive = false;
+						for (const span of progressSpans) {
+							if (parseProgress(span.textContent?.trim()) !== null) {
+								generationActive = true;
+								break;
+							}
+						}
+						if (!generationActive) {
+							console.log("[Grok Retry] Stall detected — no progress overlay, treating as silent failure");
+							appendLog("Stall detected — generation appears to have stopped silently", "warn");
+							save("canRetry", true);
+							save("lastFailureTime", now);
+						}
+					}
+					return;
+				}
 
 				// Consume the retry permission immediately to prevent duplicate retries
 				save("canRetry", false);
