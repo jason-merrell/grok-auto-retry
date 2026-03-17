@@ -8,6 +8,7 @@ export interface StorageData {
     isMinimized: boolean;
     isMaximized: boolean;
     imaginePromptValue: string;
+    simpleLogView: boolean;
 }
 
 const GLOBAL_SETTINGS_KEY = 'grokRetry_globalSettings';
@@ -20,13 +21,14 @@ export const useStorage = () => {
     useEffect(() => {
         chrome.storage.sync.get([GLOBAL_SETTINGS_KEY], (globalResult) => {
             const globalSettings = globalResult[GLOBAL_SETTINGS_KEY] || {};
-            
+
             const DEFAULT_STORAGE: StorageData = {
                 panelWidth: globalSettings.defaultPanelWidth ?? 320,
                 panelHeight: globalSettings.defaultPanelHeight ?? 400,
                 isMinimized: globalSettings.startMinimized ?? false,
                 isMaximized: false,
-                imaginePromptValue: "",
+                imaginePromptValue: '',
+                simpleLogView: false,
             };
 
             chrome.storage.local.get(DEFAULT_STORAGE, (result) => {
@@ -42,31 +44,35 @@ export const useStorage = () => {
         panelHeight: 400,
         isMinimized: false,
         isMaximized: false,
-        imaginePromptValue: "",
+        imaginePromptValue: '',
+        simpleLogView: false,
     };
 
     // Save a specific key to storage
-    const save = useCallback(<K extends keyof StorageData>(
-        key: K,
-        value: StorageData[K]
-    ) => {
-        setData((prev) => {
-            const current = prev || storageData;
-            const updated = { ...current, [key]: value };
-            chrome.storage.local.set({ [key]: value });
-            return updated;
-        });
-    }, [storageData]);
+    const save = useCallback(
+        <K extends keyof StorageData>(key: K, value: StorageData[K]) => {
+            setData((prev) => {
+                const current = prev || storageData;
+                const updated = { ...current, [key]: value };
+                chrome.storage.local.set({ [key]: value });
+                return updated;
+            });
+        },
+        [storageData]
+    );
 
     // Save multiple keys at once
-    const saveAll = useCallback((updates: Partial<StorageData>) => {
-        setData((prev) => {
-            const current = prev || storageData;
-            const updated = { ...current, ...updates };
-            chrome.storage.local.set(updates);
-            return updated;
-        });
-    }, [storageData]);
+    const saveAll = useCallback(
+        (updates: Partial<StorageData>) => {
+            setData((prev) => {
+                const current = prev || storageData;
+                const updated = { ...current, ...updates };
+                chrome.storage.local.set(updates);
+                return updated;
+            });
+        },
+        [storageData]
+    );
 
     return { data: storageData, save, saveAll, isLoading };
 };

@@ -509,6 +509,15 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             delete w.__grok_last_success_attempt;
             console.log(`[Grok Retry] Session ended with outcome: ${outcome}`);
 
+            // Log a session-end summary line visible in session logs
+            if (outcome === 'success') {
+                appendLog(`Session ended — Goal reached (${videosGenerated}/${videoGoal} videos)`, 'info');
+            } else if (outcome === 'failure') {
+                appendLog(`Session ended — Max retries reached (${retryCount}/${maxRetries})`, 'warn');
+            } else if (outcome === 'cancelled') {
+                appendLog('Session ended — Cancelled', 'warn');
+            }
+
             // Clear all video attempts that share the same originalMediaId
             if (originalMediaId) {
                 clearVideoAttemptsByMediaId(originalMediaId, outcome);
@@ -542,6 +551,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
             clearVideoGroupChain,
             clearVideoAttemptsByMediaId,
             saveAll,
+            appendLog,
             videosGenerated,
             videoGoal,
             retryCount,
@@ -642,9 +652,11 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
 
     // Click the "Make video" button with React-style value setting
     const clickMakeVideoButton = useCallback(
-        (promptValue?: string, options?: { overridePermit?: boolean }) => {
+        (promptValue?: string, options?: { overridePermit?: boolean; skipGoalCheck?: boolean }) => {
             const now = Date.now();
-            if (postData.videoGoal > 0 && postData.videosGenerated >= postData.videoGoal) {
+            // Skip goal check only when explicitly requested — e.g. when startSession just
+            // reset videosGenerated to 0 via saveAll but React state hasn't settled yet.
+            if (!options?.skipGoalCheck && postData.videoGoal > 0 && postData.videosGenerated >= postData.videoGoal) {
                 appendLog(
                     `Video goal reached — skipping attempt (${postData.videosGenerated}/${postData.videoGoal})`,
                     'info'
@@ -840,9 +852,11 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
                         // Check stream state first — generation may have completed or
                         // still be running even though the DOM overlay is not visible
                         // (e.g. browser throttles rendering in a background tab).
-                        const streamParentId = (window as any).__grok_session_media_id
-                            ?? (window as any).__grok_session_post_id
-                            ?? sessionKey ?? postId;
+                        const streamParentId =
+                            (window as any).__grok_session_media_id ??
+                            (window as any).__grok_session_post_id ??
+                            sessionKey ??
+                            postId;
                         const latestAttempt = getLatestAttemptForParent(streamParentId);
                         if (latestAttempt && (latestAttempt.status === 'running' || latestAttempt.status === 'completed')) {
                             // Stream indicates generation is still active or already done — not a stall

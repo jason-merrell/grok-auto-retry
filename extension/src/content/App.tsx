@@ -460,7 +460,8 @@ const ImaginePostApp: React.FC = () => {
         // Pass the prompt directly to startSession to avoid reading stale state
         startSession(promptToUse);
         // Allow the initial manual click to proceed even before any failure notice
-        clickMakeVideoButton(promptToUse, { overridePermit: true });
+        // skipGoalCheck because startSession just reset videosGenerated to 0 but state hasn't settled
+        clickMakeVideoButton(promptToUse, { overridePermit: true, skipGoalCheck: true });
     }, [capturePromptFromSite, clickMakeVideoButton, lastPromptValue, startSession, updatePromptValue]);
 
     const handleCancelSession = React.useCallback(() => {
