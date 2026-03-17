@@ -58,7 +58,7 @@ export interface PostData extends PersistentData, SessionData { }
 const PERSISTENT_STORAGE_PREFIX = 'grokRetryPost_';
 const SESSION_STORAGE_PREFIX = 'grokRetrySession_';
 const GLOBAL_SETTINGS_KEY = 'grokRetry_globalSettings';
-const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal', 'videoGroup'];
+const PERSISTENT_KEYS: (keyof PersistentData)[] = ['maxRetries', 'autoRetryEnabled', 'lastPromptValue', 'videoGoal', 'videoGroup', 'originalMediaId'];
 const SESSION_KEYS: (keyof SessionData)[] = ['retryCount', 'isSessionActive', 'videosGenerated', 'lastAttemptTime', 'lastFailureTime', 'canRetry', 'logs', 'attemptProgress', 'lastSessionOutcome', 'lastSessionSummary', 'sessionMediaId'];
 const SESSION_COUNTER_KEYS: (keyof SessionData)[] = ['creditsUsed', 'layer1Failures', 'layer2Failures', 'layer3Failures'];
 const ALL_SESSION_KEYS: (keyof SessionData)[] = [...SESSION_KEYS, ...SESSION_COUNTER_KEYS];
@@ -200,7 +200,7 @@ export const usePostStorage = (postId: string | null, mediaId: string | null) =>
 
             if (persistentKey && typeof chrome !== 'undefined' && chrome?.storage?.local) {
                 chrome.storage.local.get([persistentKey], (result) => {
-                    const persistentData = result[persistentKey] || DEFAULT_PERSISTENT_DATA;
+                    const persistentData = { ...DEFAULT_PERSISTENT_DATA, ...(result[persistentKey] || {}) };
                     handlePersistentResult(persistentData);
                 });
             } else {
@@ -407,15 +407,33 @@ export const usePostStorage = (postId: string | null, mediaId: string | null) =>
             const sessionData = sessionStorage.getItem(resolvedFromSessionKey);
             if (sessionData && toSessionKey) {
                 const resolvedToSessionKey = `${SESSION_STORAGE_PREFIX}${toSessionKey}`;
+
+                // Embed critical persistent fields into session data so they survive
+                // the async race between chrome.storage.local migration and the
+                // loading effect that fires when postId/sessionKeyId changes.
+                // Without this, fields like videoGoal can be undefined when the
+                // loading effect reads the new persistent key before the async
+                // migration write has completed.
+                const parsed = JSON.parse(sessionData);
+                const currentData = data;
+                if (currentData) {
+                    for (const key of PERSISTENT_KEYS) {
+                        if (parsed[key] === undefined && currentData[key] !== undefined) {
+                            parsed[key] = currentData[key];
+                        }
+                    }
+                }
+                const enrichedSessionData = JSON.stringify(parsed);
+
                 if (resolvedFromSessionKey !== resolvedToSessionKey) {
-                    sessionStorage.setItem(resolvedToSessionKey, sessionData);
+                    sessionStorage.setItem(resolvedToSessionKey, enrichedSessionData);
                     console.log('[Grok Retry] Migrated session data to new session key');
                 }
 
                 // Also persist under legacy post-based key for backward compatibility
                 const legacyToSessionKey = `${SESSION_STORAGE_PREFIX}${toPostId}`;
                 if (legacyToSessionKey !== resolvedToSessionKey) {
-                    sessionStorage.setItem(legacyToSessionKey, sessionData);
+                    sessionStorage.setItem(legacyToSessionKey, enrichedSessionData);
                 }
 
                 lastLoadedPostIdRef.current = null;
@@ -424,7 +442,7 @@ export const usePostStorage = (postId: string | null, mediaId: string | null) =>
         } catch (error) {
             console.error('[Grok Retry] Failed to migrate session storage:', error);
         }
-    }, []);
+    }, [data]);
 
     // Test bridge: expose methods that call the same storage helpers used in production
     useEffect(() => {

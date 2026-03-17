@@ -4,7 +4,7 @@ import { findPromptInput, writePromptValue, writePromptViaBridge, buildSelectorF
 import { usePostStorage } from './useSessionStorage';
 import type { SessionOutcome, SessionSummary } from './useSessionStorage';
 import type { PostRouteIdentity } from './usePostId';
-import { clearVideoAttemptsByImageReference } from '../lib/grokStream';
+import { clearVideoAttemptsByImageReference, getLatestAttemptForParent } from '../lib/grokStream';
 
 const CLICK_COOLDOWN = 8000; // 8 seconds between retries
 const SESSION_TIMEOUT = 120000; // 2 minutes - auto-end session if no success/failure feedback
@@ -92,7 +92,7 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
     const autoRetryEnabled = postData.autoRetryEnabled;
     const lastPromptValue = postData.lastPromptValue;
     const isSessionActive = postData.isSessionActive;
-    const videoGoal = postData.videoGoal;
+    const videoGoal = postData.videoGoal ?? 1;
     const videoGroup = postData.videoGroup ?? [];
     const videosGenerated = postData.videosGenerated;
     const lastAttemptTime = postData.lastAttemptTime;
@@ -813,6 +813,18 @@ export const useGrokRetry = ({ postId, mediaId }: PostRouteIdentity) => {
                         postData.lastAttemptTime > 0 &&
                         now - postData.lastAttemptTime >= STALL_DETECT_DELAY
                     ) {
+                        // Check stream state first — generation may have completed or
+                        // still be running even though the DOM overlay is not visible
+                        // (e.g. browser throttles rendering in a background tab).
+                        const streamParentId = (window as any).__grok_session_media_id
+                            ?? (window as any).__grok_session_post_id
+                            ?? sessionKey ?? postId;
+                        const latestAttempt = getLatestAttemptForParent(streamParentId);
+                        if (latestAttempt && (latestAttempt.status === 'running' || latestAttempt.status === 'completed')) {
+                            // Stream indicates generation is still active or already done — not a stall
+                            return;
+                        }
+
                         // Check if generation overlay is still visible
                         const progressSpans = document.querySelectorAll<HTMLElement>(
                             'span.tabular-nums, span.animate-pulse'
