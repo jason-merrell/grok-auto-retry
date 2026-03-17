@@ -306,16 +306,15 @@ export const GlobalSettingsDialog: React.FC<GlobalSettingsDialogProps> = ({ open
 									id="defaultPanelHeight"
 									type="number"
 									min={100}
-									max={800}
 									defaultValue={settings.defaultPanelHeight}
 									onBlur={(e) => {
-										const value = Math.max(100, Math.min(800, parseInt(e.target.value) || 400));
+										const value = Math.max(100, parseInt(e.target.value) || 400);
 										saveSetting("defaultPanelHeight", value);
 										showSaveStatus("Saved");
 									}}
 									className="w-32"
 								/>
-								<p className="text-xs text-muted-foreground">Panel height in pixels (100-800)</p>
+								<p className="text-xs text-muted-foreground">Panel height in pixels (100+)</p>
 							</div>
 
 							<div className="flex items-center justify-between">

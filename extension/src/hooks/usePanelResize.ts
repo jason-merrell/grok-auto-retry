@@ -4,15 +4,19 @@ import { useStorage } from './useStorage';
 const MIN_WIDTH = 260;
 const MAX_WIDTH = 520;
 const MIN_HEIGHT = 200;
-const MAX_HEIGHT = 800;
+const PANEL_PADDING = 16; // matches the bottom: 16px in ControlPanel / ImaginePanel
 const BASE_WIDTH = 320;
 const MIN_FONT = 11;
 const MAX_FONT = 16;
+
+/** Equal padding top & bottom → max height = viewport - 2 × padding */
+const getMaxHeight = () => window.innerHeight - 2 * PANEL_PADDING;
 
 export const usePanelResize = () => {
   const { data: storage, save } = useStorage();
   const [width, setWidth] = useState(storage.panelWidth);
   const [height, setHeight] = useState(storage.panelHeight);
+  const [maxHeight, setMaxHeight] = useState(getMaxHeight);
   const [isResizing, setIsResizing] = useState(false);
   
   const startX = useRef(0);
@@ -25,6 +29,13 @@ export const usePanelResize = () => {
     setWidth(storage.panelWidth);
     setHeight(storage.panelHeight);
   }, [storage.panelWidth, storage.panelHeight]);
+
+  // Keep maxHeight in sync with viewport size
+  useEffect(() => {
+    const onResize = () => setMaxHeight(getMaxHeight());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Calculate font size based on width
   const fontSize = Math.max(
@@ -49,11 +60,11 @@ export const usePanelResize = () => {
     const deltaY = startY.current - e.clientY;
 
     const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth.current + deltaX));
-    const newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, startHeight.current + deltaY));
+    const newHeight = Math.max(MIN_HEIGHT, Math.min(maxHeight, startHeight.current + deltaY));
 
     setWidth(newWidth);
     setHeight(newHeight);
-  }, [isResizing]);
+  }, [isResizing, maxHeight]);
 
   const handleResizeEnd = useCallback(() => {
     if (isResizing) {
