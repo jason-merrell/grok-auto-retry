@@ -56,8 +56,8 @@ interface SimpleLogEntry {
 
 function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
     const entries: SimpleLogEntry[] = [];
-    let currentAttempt = 0;
     let currentMax = 0;
+    let failCount = 0;
     let successCount = 0;
     let videoGoal = 0;
 
@@ -65,11 +65,20 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
         const timeMatch = line.match(/^(\d{1,2}:\d{2}:\d{2})/);
         const time = timeMatch ? timeMatch[1] : '';
 
-        // Track retry count from "Retry X/Y" lines
+        // Track max retries from "Retry X/Y" lines (don't track attempt —
+        // we count failures directly to handle the first attempt correctly)
         const retryMatch = line.match(/Retry (\d+)\/(\d+)/);
         if (retryMatch) {
-            currentAttempt = parseInt(retryMatch[1], 10);
-            currentMax = parseInt(retryMatch[2], 10);
+            const max = parseInt(retryMatch[2], 10);
+            if (max > 0 && currentMax === 0) {
+                currentMax = max;
+                // Backfill earlier entries that had unknown maxRetries
+                for (const e of entries) {
+                    if (e.maxRetries === 0) e.maxRetries = max;
+                }
+            } else if (max > 0) {
+                currentMax = max;
+            }
             continue;
         }
 
@@ -104,10 +113,11 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
             } else if (rawReason.includes('unknown')) {
                 colorClass = 'text-yellow-600';
             }
+            failCount++;
             entries.push({
                 time,
                 type: 'fail',
-                attemptNum: currentAttempt,
+                attemptNum: failCount,
                 maxRetries: currentMax,
                 percent,
                 reason,
@@ -122,7 +132,7 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
             entries.push({
                 time,
                 type: 'success',
-                attemptNum: currentAttempt,
+                attemptNum: failCount,
                 maxRetries: currentMax,
                 videoNum: successCount,
                 videoGoal: videoGoal || 1,
@@ -136,7 +146,7 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
             entries.push({
                 time,
                 type: 'session-end',
-                attemptNum: currentAttempt,
+                attemptNum: failCount,
                 maxRetries: currentMax,
                 message: 'Session stopped — Rate limit detected',
                 colorClass: 'text-red-500',
@@ -149,7 +159,7 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
             entries.push({
                 time,
                 type: 'session-end',
-                attemptNum: currentAttempt,
+                attemptNum: failCount,
                 maxRetries: currentMax,
                 message: 'Session stopped — Timeout (no feedback received)',
                 colorClass: 'text-orange-500',
@@ -157,16 +167,8 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
             continue;
         }
 
-        // Session end: stall
+        // Skip stall detection lines — they are internal retry mechanism, not user-facing events
         if (line.includes('Stall detected')) {
-            entries.push({
-                time,
-                type: 'session-end',
-                attemptNum: currentAttempt,
-                maxRetries: currentMax,
-                message: 'Stall detected — generation stopped silently',
-                colorClass: 'text-orange-500',
-            });
             continue;
         }
 
@@ -175,7 +177,7 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
             entries.push({
                 time,
                 type: 'session-end',
-                attemptNum: currentAttempt,
+                attemptNum: failCount,
                 maxRetries: currentMax,
                 message: 'Session ended — Max retries reached',
                 colorClass: 'text-red-500',
@@ -188,7 +190,7 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
             entries.push({
                 time,
                 type: 'session-end',
-                attemptNum: currentAttempt,
+                attemptNum: failCount,
                 maxRetries: currentMax,
                 message: 'Session ended — Goal reached ✓',
                 colorClass: 'text-green-500',
@@ -201,7 +203,7 @@ function extractSimpleLogs(logs: string[]): SimpleLogEntry[] {
             entries.push({
                 time,
                 type: 'session-end',
-                attemptNum: currentAttempt,
+                attemptNum: failCount,
                 maxRetries: currentMax,
                 message: 'Session ended — Cancelled',
                 colorClass: 'text-muted-foreground',
