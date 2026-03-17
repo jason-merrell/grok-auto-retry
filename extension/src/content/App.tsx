@@ -200,6 +200,7 @@ const ImaginePostApp: React.FC = () => {
         onModerationDetected: handleModerationDetected,
         onRateLimitDetected: handleRateLimitDetected,
         enabled: autoRetryEnabled,
+        parentPostId: mediaId ?? postId,
     });
 
     // Handle successful video generation

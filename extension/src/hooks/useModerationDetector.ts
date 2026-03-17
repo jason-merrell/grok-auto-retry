@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { selectors } from '../config/selectors';
+import { subscribeGrokStream, getGrokStreamSnapshot } from '../lib/grokStream';
 
 const MODERATION_TEXT = 'Content Moderated. Try a different idea.';
 const RATE_LIMIT_TEXT = 'Rate limit reached';
@@ -9,15 +10,17 @@ interface ModerationDetectorOptions {
     onModerationDetected: () => void;
     onRateLimitDetected?: () => void;
     enabled: boolean;
+    parentPostId?: string | null;
 }
 
-export const useModerationDetector = ({ onModerationDetected, onRateLimitDetected, enabled }: ModerationDetectorOptions) => {
+export const useModerationDetector = ({ onModerationDetected, onRateLimitDetected, enabled, parentPostId }: ModerationDetectorOptions) => {
     // All gating state lives in refs to avoid stale-closure issues with useCallback
     const lastTriggerAtRef = useRef<number>(0);
     const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const rateLimitFiredRef = useRef(false);
     const moderationVisibleRef = useRef(false);
     const diagLoggedRef = useRef(false);
+    const seenModeratedIdsRef = useRef<Set<string>>(new Set());
 
     // Keep latest callbacks in refs so the check function never goes stale
     const onModRef = useRef(onModerationDetected);
@@ -76,9 +79,9 @@ export const useModerationDetector = ({ onModerationDetected, onRateLimitDetecte
                     // Reset edge tracker AFTER firing so repeated presence re-triggers
                     // (gated by the cooldown above)
                     moderationVisibleRef.current = false;
-                    console.log('[Grok Retry] Moderation detected — firing callback');
+                    console.log('[Grok Retry] Moderation detected via DOM fallback — firing callback');
                     try {
-                        (window as any).__grok_append_log?.('Moderation detected', 'warn');
+                        (window as any).__grok_append_log?.('Moderation detected (DOM fallback)', 'warn');
                     } catch {}
                     onModRef.current();
                 }, 100);
@@ -145,6 +148,46 @@ export const useModerationDetector = ({ onModerationDetected, onRateLimitDetecte
             }
         };
     }, [enabled, checkForModeration]);
+
+    // Stream-based moderation detection (primary) — scoped to parentPostId
+    useEffect(() => {
+        if (!enabled || !parentPostId) return;
+
+        const unsubscribe = subscribeGrokStream(() => {
+            const snap = getGrokStreamSnapshot();
+            const parent = snap.parents[parentPostId];
+            if (!parent) return;
+
+            for (let i = parent.attempts.length - 1; i >= 0; i -= 1) {
+                const attemptId = parent.attempts[i];
+                const attempt = snap.videos[attemptId];
+                if (!attempt || attempt.status !== 'moderated') continue;
+                if (seenModeratedIdsRef.current.has(attemptId)) continue;
+
+                seenModeratedIdsRef.current.add(attemptId);
+
+                const now = Date.now();
+                if (now - lastTriggerAtRef.current < MODERATION_TRIGGER_COOLDOWN_MS) {
+                    console.log('[Grok Retry] Moderation detected via stream but cooldown active, skipping');
+                    return;
+                }
+                lastTriggerAtRef.current = now;
+                console.log(`[Grok Retry] Moderation detected via stream for ${attemptId}`);
+                try {
+                    (window as any).__grok_append_log?.('Moderation detected (stream)', 'warn');
+                } catch {}
+                onModRef.current();
+                return;
+            }
+        });
+
+        return unsubscribe;
+    }, [enabled, parentPostId]);
+
+    // Reset seen moderated IDs when parentPostId changes
+    useEffect(() => {
+        seenModeratedIdsRef.current.clear();
+    }, [parentPostId]);
 
     return {
         moderationDetected: moderationVisibleRef.current,
